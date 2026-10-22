@@ -5476,7 +5476,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       dias.map(f => { const d = Dd(f), fin = d.getDay() === 0 || d.getDay() === 6; return '<th class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + DIAS[d.getDay()].slice(0, 3) + ' ' + d.getDate() + '</th>'; }).join('') + '</tr></thead><tbody>' +
       gente.map(n => '<tr data-persona="' + esc(n.startsWith('—') ? '' : n) + '"><td class="pn" title="' + esc(n.startsWith('—') ? 'Sin asignar' : n + (rolDe(n) ? ' · ' + rolDe(n) : '')) + '">' + (n.startsWith('—') ? '<span class="ag-sa">❔</span>' : avatarDe(n)) + '</td>' +
         dias.map(f => { const L = (M[n] || {})[f] || [], d = Dd(f), fin = d.getDay() === 0 || d.getDay() === 6;
-          return '<td class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + L.map(x => '<div class="ag' + (x.hecha ? ' hecha' : '') + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + '" title="' + esc(x.txt + (x.hecha ? ' · hecha' : x.venc ? ' · atrasada' : ' · arrastre a otra persona para reasignar')) + '"' +
+          return '<td class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + L.map(x => '<div class="ag' + (x.hecha ? ' hecha' : '') + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + ';background:' + ETAPA_COLOR[x.k] + '30" title="' + esc(x.txt + (x.hecha ? ' · hecha' : x.venc ? ' · atrasada' : ' · arrastre a otra persona para reasignar')) + '"' +
             (!x.hecha && (x.id || x.turno) ? ' data-arr="1"' + (x.id ? ' data-id="' + esc(x.id) + '" data-fz="' + esc(x.fz || '') + '" data-clave="' + esc(x.clave || '') + '"' : ' data-turno="' + esc(x.turno) + '"') : '') +
             (x.id ? ' onclick="ir(\'caso\',' + js(x.id) + ')"' : x.turno ? ' onclick="turnoRegistrar(' + js(x.turno) + ')"' : '') + '>' + (x.hecha ? '✓ ' : '') + esc(x.txt) + '</div>').join('') + '</td>'; }).join('') + '</tr>').join('') +
       '</tbody></table></div><p class="note" style="margin-top:-4px">Pase el mouse sobre cada ícono para ver quién es. Para reasignar, arrastre la labor a la fila de otra persona (en el teléfono: mantenga apretado y arrastre); a ❔ queda sin asignar, y a 🗑️ se quita. La revisión de ingresos se registra tocándola. ✓ hecho · en rojo, atrasado. <a href="javascript:void 0" onclick="verQuitadas()">Ver labores quitadas</a></p>';
@@ -5550,7 +5550,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     'table.agenda{table-layout:fixed}table.agenda td.pn{text-align:center;cursor:default}table.agenda th.fin,table.agenda td.fin{background:#FAFBFC}table.agenda th.hoy,table.agenda td.hoy{background:#FFF8E1}' +
     '.ag[data-arr]{cursor:grab;touch-action:pan-y}.ag-fant{position:fixed;z-index:80;pointer-events:none;width:150px;box-shadow:0 6px 18px rgba(14,42,71,.3);background:#fff;opacity:.95}.ag-orig{opacity:.35}' +
     'body.arrastrando{user-select:none;cursor:grabbing}table.agenda tr.drop td{background:#E6F4F1!important}table.agenda tr.no-drop td{opacity:.35}#ag-papelera{position:fixed;right:20px;bottom:90px;z-index:79;background:#fff;border:2px dashed #B3261E;color:#B3261E;border-radius:14px;padding:14px 18px;font-weight:700;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18)}#ag-papelera span{font-weight:400;font-size:12px}#ag-papelera.sobre{background:#FCE8E6;transform:scale(1.06)}table.agenda tr.drop td.pn{box-shadow:inset 4px 0 0 var(--teal)}' +
-    '.ag{font-size:12px;cursor:pointer;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ag.hecha{opacity:.55}.ag.venc{background:#FCE8E6}.ag-sa{font-size:15px}';
+    '.ag{font-size:12px;cursor:pointer;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ag.hecha{opacity:.55}.ag.venc{box-shadow:inset 0 0 0 1.5px #D9534F}.ag.venc:after{content:" ⚠";color:#B3261E}.ag-sa{font-size:15px}';
   document.head.appendChild(stAg);
   // Hoy: la revisión de ingresos del día va arriba
   const vh1 = vHoy;
@@ -6226,7 +6226,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     const L = (typeof vigiaPendientesDe === 'function' ? vigiaPendientesDe(n) : []), d0 = hoy();
     const hoyL = L.filter(x => x.fecha <= d0), prox = L.filter(x => x.fecha > d0);
     const nuevo = x => antes && x.act && String(x.act) > antes;
-    const li = x => '<div class="sl-i' + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + '"' +
+    const li = x => '<div class="sl-i' + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + ';background:' + ETAPA_COLOR[x.k] + '30"' +
       (x.id ? ' onclick="cerrar();ir(\'caso\',' + js(x.id) + ')"' : x.turno ? ' onclick="cerrar();turnoRegistrar(' + js(x.turno) + ')"' : '') + '>' +
       (nuevo(x) ? '<span class="sl-n">nuevo</span>' : '') + esc(x.txt) + (x.fecha > d0 ? ' <span class="note">· ' + dm(x.fecha) + '</span>' : '') + '</div>';
     const roles = vigiaRolesDe(n);
@@ -6250,7 +6250,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     '.lg-p.yo .lg-a{box-shadow:0 0 0 3px #5FD3C4,0 6px 20px rgba(0,0,0,.25)}.lg-s{margin-top:28px;background:none;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:999px;padding:7px 16px;font:inherit;font-size:13px;cursor:pointer;opacity:.85}' +
     '@keyframes lgIn{from{opacity:0}to{opacity:1}}@keyframes lgOut{to{opacity:0;transform:scale(1.04)}}@keyframes lgP{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:none}}' +
     '.saludo .sl-h{display:flex;gap:12px;align-items:center;margin-bottom:8px}.saludo .sl-h .av{width:2.2em;height:2.2em;font-size:26px}.saludo h3{font-size:15px;margin:14px 0 6px;color:var(--navy)}' +
-    '.sl-i{border-left:4px solid #999;background:#F6F8FA;border-radius:6px;padding:7px 10px;margin:0 0 6px;cursor:pointer;font-size:14px}.sl-i.venc{background:#FCE8E6}.sl-i:hover{background:#EEF3F6}' +
+    '.sl-i{border-left:4px solid #999;background:#F6F8FA;border-radius:6px;padding:7px 10px;margin:0 0 6px;cursor:pointer;font-size:14px}.sl-i.venc{box-shadow:inset 0 0 0 1.5px #D9534F}.sl-i:hover{background:#EEF3F6}' +
     '.sl-n{background:#1B7A86;color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:1px 7px;margin-right:6px}.sl-av{background:#E6F4F1;border-radius:8px;padding:8px 10px;font-size:14px;margin:6px 0}' +
     '@media (prefers-reduced-motion:reduce){#login,.lg-p,.lg-logo{animation:none!important}}';
   document.head.appendChild(st);
