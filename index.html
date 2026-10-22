@@ -3134,9 +3134,40 @@ function leerEv(ev) {
   return o;
 }
 const irpTxt = x => ({I: 'comprende al primer intento', R: 'comprende tras refuerzo', P: 'pendiente', NA: 'no aplica'})[String(x).split(' ')[0]] || x;
+// v32 · «En suma» al inicio del texto para la ficha: lo esencial en 3 a 6 líneas, antes del detalle
+function enSuma(ev, v) {
+  const S = [], l1 = x => x ? String(x).split(' ')[0] : '', tb = () => [['tb_medicamentos', 'fármacos'], ['tb_controles', 'controles'], ['tb_alimentacion', 'no farmacológico']].filter(([k]) => v[k]).map(([k, n]) => n + ' ' + l1(v[k])).join(', ');
+  const pend = () => [['tb_medicamentos', 'fármacos'], ['tb_controles', 'controles'], ['tb_alimentacion', 'no farmacológico']].filter(([k]) => /^[RP]/.test(v[k] || '')).map(x => x[1]);
+  if (ev.nodo === 'T6') {
+    if (v.consentimiento === 'rechaza') return ['Rechaza el seguimiento telefónico' + (v.motivo_rechazo ? ': ' + v.motivo_rechazo : '') + '.'];
+    if (v.consentimiento) S.push('Acepta seguimiento telefónico VIGÍA por 30 días' + (v.interlocutor ? ' (' + v.interlocutor.toLowerCase() + (v.interlocutor_nombre ? ': ' + v.interlocutor_nombre : '') + ')' : '') + '.');
+    if (tb()) S.push('Teach-back: ' + tb() + (v.educaciones && v.educaciones !== 'sí' ? '; educaciones del alta ' + v.educaciones : '') + '.');
+    if (v.tb_brecha) S.push('Pendiente: ' + v.tb_brecha + '.');
+    const no = [['c_telefono', 'teléfono'], ['c_contacto', 'contacto'], ['c_direccion', 'dirección']].filter(([k]) => v[k] === 'no').map(x => x[1]);
+    if (no.length) S.push('Sin verificar: ' + no.join(', ') + '.');
+    if (v.c_celular_gc) S.push(v.c_celular_gc === 'sí' ? 'Guardó el celular de Gestión de Casos.' : 'No guardó el celular de Gestión de Casos.');
+    if (v.fecha_alta) S.push('Alta ' + fcl(v.fecha_alta) + '; 1ª llamada a las 48–96 h' + (v.llamadas_agendadas === 'sí' ? ', 4 llamadas agendadas en ficha' : '') + '.');
+    return S;
+  }
+  if (ev.nodo === 'T12') {
+    if (v.resultado === 'fallido') return ['Sin contacto telefónico. Se reintenta.'];
+    if (v.resultado) S.push('Llamada lograda' + (v.interlocutor ? ' con ' + v.interlocutor + (v.interlocutor_nombre ? ' (' + v.interlocutor_nombre + ')' : '') : '') + '.');
+    const pr = [['r_medicamentos', 'problema con medicamentos'], ['r_controles', 'controles sin agendar'], ['r_nofarm', 'no sigue indicaciones no farmacológicas'], ['r_sintomas', 'síntomas de descompensación']].filter(([k]) => v[k] === 'Sí').map(x => x[1]);
+    S.push(pr.length ? 'Problemas: ' + pr.join(', ') + '.' : 'Sin problemas de medicamentos, controles, indicaciones ni síntomas.');
+    if (tb()) S.push('Teach-back: ' + tb() + (pend().length && v.tb_correccion ? '; ' + v.tb_correccion.replace(/\n+/g, '; ') : '') + '.');
+    if (v.urgencia && v.urgencia.startsWith('sí')) S.push('Consultó en urgencia' + (v.fecha_urgencia ? ' el ' + fcl(v.fecha_urgencia) : '') + (v.urg_lugar ? ' (' + v.urg_lugar + ')' : '') + '.');
+    if (v.rehosp && v.rehosp.startsWith('sí')) S.push('Rehospitalización' + (v.fecha_rehosp ? ' desde el ' + fcl(v.fecha_rehosp) : '') + (v.rehosp_lugar ? ' en ' + v.rehosp_lugar : '') + (v.rehosp_estado ? ', ' + v.rehosp_estado : '') + '.');
+    if (v.salida) S.push('Conducta: ' + v.salida + (v.accion ? ' · ' + v.accion : '') + (v.responsable_accion ? ' (' + v.responsable_accion + (v.plazo_accion ? ', ' + v.plazo_accion : '') + ')' : '') + '.');
+    return S;
+  }
+  // otras evaluaciones: las primeras respuestas cerradas que no son «no»
+  ev.secciones.forEach(sc => sc.campos.forEach(c => { if (S.length < 4 && c.t === 'sel' && v[c.k] && !/^no$/i.test(v[c.k]) && c.nota !== false) S.push(c.l + ': ' + v[c.k] + '.'); }));
+  return S;
+}
 function notaEval(ev, v, hito) {
   const fecha = ev.nodo === 'T12' && v.fecha_real ? fcl(v.fecha_real.slice(0, 10)) + ' ' + v.fecha_real.slice(11, 16) : fcl(hoy());
   const L = [ev.titulo_nota + (ev.nodo === 'T12' ? ' - ' + hitoTxt(hito).toUpperCase() : ''), 'Fecha: ' + fecha];
+  try { const es = enSuma(ev, v); if (es.length) { L.push('', 'EN SUMA:'); es.forEach(x => L.push('- ' + x)); } } catch (e) {}
   ev.secciones.forEach(s => {
     const lines = [], si = [], no = [];
     const nsino = s.campos.filter(c => c.t === 'sino' && c.nota !== false).length;
