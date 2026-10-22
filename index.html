@@ -5488,20 +5488,26 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     ARR = {it, x: e.clientX, y: e.clientY, on: false, id: e.pointerId, tipo: e.pointerType};
     if (e.pointerType !== 'mouse') ARR.t = setTimeout(() => { if (ARR) { ARR.on = true; empezar(); } }, 350); // en el teléfono: mantener apretado
   });
-  function empezar() { const it = ARR.it, g = it.cloneNode(true); g.className = 'ag ag-fant'; g.style.borderLeftColor = it.style.borderLeftColor; document.body.appendChild(g); ARR.g = g; it.classList.add('ag-orig'); document.body.classList.add('arrastrando'); }
+  // solo se puede soltar en la fila de alguien que tiene el rol de esa labor (EQUIPO · rol)
+  const faseItem = it => it.dataset.turno ? 'revision' : (it.dataset.fz || '');
+  const puede = (it, n) => { const f = faseItem(it); return !!n && !!f && deFase(f).includes(n); };
+  const NOMBRE_FASE = {revision: 'Revisión de ingresos', hospital: 'Seguimiento hospitalario', gestion: 'Gestión de Casos'};
+  function empezar() { document.querySelectorAll('table.agenda tr[data-persona]').forEach(r => r.classList.toggle('no-drop', !puede(ARR.it, r.dataset.persona)));
+    const it = ARR.it, g = it.cloneNode(true); g.className = 'ag ag-fant'; g.style.borderLeftColor = it.style.borderLeftColor; document.body.appendChild(g); ARR.g = g; it.classList.add('ag-orig'); document.body.classList.add('arrastrando'); }
   const filaEn = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest && el.closest('table.agenda tr[data-persona]'); };
   document.addEventListener('pointermove', e => {
     if (!ARR || e.pointerId !== ARR.id) return;
     if (!ARR.on) { if (ARR.tipo === 'mouse' && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > 6) { ARR.on = true; empezar(); } else { if (ARR.t && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > 10) { clearTimeout(ARR.t); ARR = null; } return; } }
     e.preventDefault(); ARR.g.style.left = (e.clientX + 8) + 'px'; ARR.g.style.top = (e.clientY + 8) + 'px';
-    document.querySelectorAll('table.agenda tr.drop').forEach(r => r.classList.remove('drop')); const f = filaEn(e.clientX, e.clientY); if (f && f.dataset.persona) f.classList.add('drop');
+    document.querySelectorAll('table.agenda tr.drop').forEach(r => r.classList.remove('drop')); const f = filaEn(e.clientX, e.clientY); if (f && puede(ARR.it, f.dataset.persona)) f.classList.add('drop');
   }, {passive: false});
   function soltar(e) {
     if (!ARR || e.pointerId !== ARR.id) return; const A = ARR; ARR = null; clearTimeout(A.t);
-    document.querySelectorAll('table.agenda tr.drop').forEach(r => r.classList.remove('drop')); document.body.classList.remove('arrastrando');
+    document.querySelectorAll('table.agenda tr.drop,table.agenda tr.no-drop').forEach(r => r.classList.remove('drop', 'no-drop')); document.body.classList.remove('arrastrando');
     if (!A.on) return; if (A.g) A.g.remove(); A.it.classList.remove('ag-orig');
     const f = filaEn(e.clientX, e.clientY), n = f && f.dataset.persona; window.__agNoClic = true; setTimeout(() => { window.__agNoClic = false; }, 300);
     if (!n) return;
+    if (!puede(A.it, n)) { toast(nomC(n) + ' no tiene el rol de ' + (NOMBRE_FASE[faseItem(A.it)] || 'esa labor') + ' (hoja EQUIPO): no se reasignó.', 5000); return; }
     if (A.it.dataset.turno) { turnoAsignar(A.it.dataset.turno, n); return; }
     const p = pac(A.it.dataset.id), campo = CAMPO_FASE[A.it.dataset.fz]; if (!p || !campo || p[campo] === n) return;
     const reg = {id: p.id, actualizado: ahora()}; reg[campo] = n; Object.assign(p, reg);
@@ -5515,7 +5521,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     '.ag-p.con{background:#FFF4D6;border-color:#E8C76A}.ag-p.venc{background:#FCE8E6;border-color:#E7B2AD}.ag-p.sin{opacity:.55}' +
     'table.agenda{table-layout:fixed}table.agenda td.pn{text-align:center;cursor:default}table.agenda th.fin,table.agenda td.fin{background:#FAFBFC}table.agenda th.hoy,table.agenda td.hoy{background:#FFF8E1}' +
     '.ag[data-arr]{cursor:grab;touch-action:pan-y}.ag-fant{position:fixed;z-index:80;pointer-events:none;width:150px;box-shadow:0 6px 18px rgba(14,42,71,.3);background:#fff;opacity:.95}.ag-orig{opacity:.35}' +
-    'body.arrastrando{user-select:none;cursor:grabbing}table.agenda tr.drop td{background:#E6F4F1!important}table.agenda tr.drop td.pn{box-shadow:inset 4px 0 0 var(--teal)}' +
+    'body.arrastrando{user-select:none;cursor:grabbing}table.agenda tr.drop td{background:#E6F4F1!important}table.agenda tr.no-drop td{opacity:.35}table.agenda tr.drop td.pn{box-shadow:inset 4px 0 0 var(--teal)}' +
     '.ag{font-size:12px;cursor:pointer;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ag.hecha{opacity:.55}.ag.venc{background:#FCE8E6}.ag-sa{font-size:15px}';
   document.head.appendChild(stAg);
   // Hoy: la revisión de ingresos del día va arriba
