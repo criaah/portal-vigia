@@ -5444,7 +5444,8 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     turnos(desde, hasta).forEach(t => { const f = t.fecha, txt = 'Revisar ingresos ' + dm(t.desde) + '–' + dm(t.hasta);
       if (t.estado === 'hecha') add(personaDe(t.revisado_por) || t.revisado_por || t.asignado, f, {txt, k: 'ingreso', hecha: true, turno: f});
       else if (f >= d0 || t.fecha === d0) add(t.asignado, f, {txt, k: 'ingreso', turno: f});
-      else if (d0 >= desde && d0 <= hasta) add(t.asignado, d0, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f}); });
+      else if (d0 >= desde && d0 <= hasta) add(t.asignado, d0, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f});
+      else add(t.asignado, f, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f}); });
     return M;
   }
   // la agenda se mueve semana por semana (lunes a domingo)
@@ -5473,9 +5474,9 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
           return '<td class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + L.map(x => '<div class="ag' + (x.hecha ? ' hecha' : '') + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + '" title="' + esc(x.txt + (x.hecha ? ' · hecha' : x.venc ? ' · atrasada' : ' · arrastre a otra persona para reasignar')) + '"' +
             (!x.hecha && (x.id || x.turno) ? ' data-arr="1"' + (x.id ? ' data-id="' + esc(x.id) + '" data-fz="' + esc(x.fz || '') + '"' : ' data-turno="' + esc(x.turno) + '"') : '') +
             (x.id ? ' onclick="ir(\'caso\',' + esc(js(x.id)) + ')"' : x.turno ? ' onclick="turnoRegistrar(' + esc(js(x.turno)) + ')"' : '') + '>' + (x.hecha ? '✓ ' : '') + esc(x.txt) + '</div>').join('') + '</td>'; }).join('') + '</tr>').join('') +
-      '</tbody></table></div><p class="note" style="margin-top:-4px">Pase el mouse sobre cada ícono para ver quién es. Para reasignar, arrastre la labor a la fila de otra persona (en el teléfono: mantenga apretado y arrastre). ✓ hecho · en rojo, atrasado.</p>';
+      '</tbody></table></div><p class="note" style="margin-top:-4px">Pase el mouse sobre cada ícono para ver quién es. Para reasignar, arrastre la labor a la fila de otra persona (en el teléfono: mantenga apretado y arrastre). La revisión de ingresos (lunes y jueves) se registra tocándola. ✓ hecho · en rojo, atrasado.</p>';
     const desde = (() => { const d = new Date(l0); d.setDate(d.getDate() - 7); return isoD(d); })(), hasta = (() => { const d = new Date(l0); d.setDate(d.getDate() + 13); return isoD(d); })();
-    h += '<div class="ecard"><h3>Revisión de ingresos · lunes y jueves</h3><p class="note" style="margin-top:-6px">El lunes se revisan los ingresos de jueves a domingo; el jueves, los de lunes a miércoles. Asigne quién revisa y registre cuántos hubo.</p>' + turnos(desde, hasta).map(filaTurno).join('') + '</div>';
+    // la revisión de ingresos (lunes y jueves) vive en el calendario: se asigna arrastrando y se registra tocándola
     return h;
   }
   const MESES_C = 'ene feb mar abr may jun jul ago sep oct nov dic'.split(' ');

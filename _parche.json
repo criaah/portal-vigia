@@ -1,0 +1,1 @@
+[[474496, 474496, "\n      else add(t.asignado, f, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f});"], [478422, 478422, "La revisión de ingresos (lunes y jueves) se registra tocándola. "], [478654, 478964, "// la revisión de ingresos (lunes y jueves) vive en el calendario: se asigna arrastrando y se registra tocándola"]]
