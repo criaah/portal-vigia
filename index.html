@@ -4801,7 +4801,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   window.qrAviso = id => {
     const u = urlAviso(id);
     modal('<h2>QR de avisos · ' + esc(id) + '</h2><p class="note">Abre la página pública de VIGÍA con el código ya cargado. Quien atienda al paciente puede avisar la consulta y el aviso aparece en el tablero.</p>' +
-      '<div style="max-width:220px;margin:8px auto">' + qrSvg(u) + '</div><input readonly value="' + esc(u) + '" onclick="this.select()"><div class="row" style="margin-top:12px"><button class="btn sec" onclick="try{navigator.clipboard.writeText(' + esc(js(u)) + ');toast(\'Enlace copiado\')}catch(e){}">Copiar enlace</button><button class="btn" onclick="cerrar()">Cerrar</button></div>');
+      '<div style="max-width:220px;margin:8px auto">' + qrSvg(u) + '</div><input readonly value="' + esc(u) + '" onclick="this.select()"><div class="row" style="margin-top:12px"><button class="btn sec" onclick="try{navigator.clipboard.writeText(' + js(u) + ');toast(\'Enlace copiado\')}catch(e){}">Copiar enlace</button><button class="btn" onclick="cerrar()">Cerrar</button></div>');
   };
 
 
@@ -5441,13 +5441,18 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       if (t.estado === 'hecha' && t.fecha_hecha) { const f = String(t.fecha_hecha).slice(0, 10); if (f >= desde && f <= hasta) add(personaDe(t.hecho_por) || resp, f, {txt: nomP + ' · ' + que, k, hecha: true, id: p.id, fz}); return; }
       if (t.estado !== 'pendiente' || !enCurso(p) || !t.fecha_debida) return;
       const venc = t.fecha_debida < d0, f = venc ? d0 : t.fecha_debida; if (f > hasta || f < desde) return;
-      add(resp, f, {txt: nomP + ' · ' + que, k, venc, id: p.id, fz}); });
-    turnos(desde, hasta).forEach(t => { const f = t.fecha, txt = 'Revisar ingresos ' + dm(t.desde) + '–' + dm(t.hasta);
+      add(resp, f, {txt: nomP + ' · ' + que, k, venc, id: p.id, fz, act: p.actualizado || '', clave: t.clave}); });
+    turnos(desde, hasta).filter(t => t.estado !== 'eliminada').forEach(t => { const f = t.fecha, txt = 'Revisar ingresos ' + dm(t.desde) + '–' + dm(t.hasta);
       if (t.estado === 'hecha') add(personaDe(t.revisado_por) || t.revisado_por || t.asignado, f, {txt, k: 'ingreso', hecha: true, turno: f});
-      else if (f >= d0) add(t.asignado, f, {txt, k: 'ingreso', turno: f});
-      else add(t.asignado, f, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f}); }); // cada revisión queda en su propio día
+      else if (f >= d0) add(t.asignado, f, {txt, k: 'ingreso', turno: f, act: t.actualizado || ''});
+      else add(t.asignado, f, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f, act: t.actualizado || ''}); }); // cada revisión queda en su propio día
     return M;
   }
+  // pendientes de una persona: atrasado y de hoy a 7 días (para el saludo al entrar)
+  window.vigiaPendientesDe = n => { const d0 = hoy(), d = Dd(d0); d.setDate(d.getDate() + 7); const d7 = isoD(d), d1 = Dd(d0); d1.setDate(d1.getDate() - 30);
+    const M = tareasPersona(isoD(d1), d7)[n] || {};
+    return Object.keys(M).sort().flatMap(f => M[f].filter(x => !x.hecha).map(x => Object.assign({fecha: f}, x))); };
+  window.vigiaRolesDe = n => FASES.filter(([f]) => deFase(f).includes(n)).map(x => x[1]);
   // la agenda se mueve semana por semana (lunes a domingo)
   let AG_SEM = 0;
   window.agSem = d => { AG_SEM = d === 0 ? 0 : AG_SEM + d; render(); };
@@ -5458,7 +5463,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     const dias = [...Array(7)].map((_, i) => { const d = new Date(l0); d.setDate(d.getDate() + i); return isoD(d); }), M = tareasPersona(dias[0], dias[6]);
     const gente = FASES.flatMap(([f]) => deFase(f)).filter((n, i, a) => a.indexOf(n) === i);
     Object.keys(M).forEach(n => { if (!gente.includes(n) && n !== '— sin asignar —') gente.push(n); });
-    if (M['— sin asignar —']) gente.push('— sin asignar —');
+    gente.push('— sin asignar —'); // siempre: se puede soltar ahí para dejar sin asignar
     const hoyEn = dias.includes(d0);
     const fmt = f => { const d = Dd(f); return d.getDate() + ' ' + MESES_C[d.getMonth()]; };
     let h = '<div class="ag-top"><h2 style="margin:0">Agenda del equipo</h2><div class="ag-nav"><button class="btn sm sec" onclick="agSem(-1)" aria-label="Semana anterior">←</button>' +
@@ -5472,9 +5477,9 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       gente.map(n => '<tr data-persona="' + esc(n.startsWith('—') ? '' : n) + '"><td class="pn" title="' + esc(n.startsWith('—') ? 'Sin asignar' : n + (rolDe(n) ? ' · ' + rolDe(n) : '')) + '">' + (n.startsWith('—') ? '<span class="ag-sa">❔</span>' : avatarDe(n)) + '</td>' +
         dias.map(f => { const L = (M[n] || {})[f] || [], d = Dd(f), fin = d.getDay() === 0 || d.getDay() === 6;
           return '<td class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + L.map(x => '<div class="ag' + (x.hecha ? ' hecha' : '') + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + '" title="' + esc(x.txt + (x.hecha ? ' · hecha' : x.venc ? ' · atrasada' : ' · arrastre a otra persona para reasignar')) + '"' +
-            (!x.hecha && (x.id || x.turno) ? ' data-arr="1"' + (x.id ? ' data-id="' + esc(x.id) + '" data-fz="' + esc(x.fz || '') + '"' : ' data-turno="' + esc(x.turno) + '"') : '') +
-            (x.id ? ' onclick="ir(\'caso\',' + esc(js(x.id)) + ')"' : x.turno ? ' onclick="turnoRegistrar(' + esc(js(x.turno)) + ')"' : '') + '>' + (x.hecha ? '✓ ' : '') + esc(x.txt) + '</div>').join('') + '</td>'; }).join('') + '</tr>').join('') +
-      '</tbody></table></div><p class="note" style="margin-top:-4px">Pase el mouse sobre cada ícono para ver quién es. Para reasignar, arrastre la labor a la fila de otra persona (en el teléfono: mantenga apretado y arrastre). La revisión de ingresos (lunes y jueves) se registra tocándola. ✓ hecho · en rojo, atrasado.</p>';
+            (!x.hecha && (x.id || x.turno) ? ' data-arr="1"' + (x.id ? ' data-id="' + esc(x.id) + '" data-fz="' + esc(x.fz || '') + '" data-clave="' + esc(x.clave || '') + '"' : ' data-turno="' + esc(x.turno) + '"') : '') +
+            (x.id ? ' onclick="ir(\'caso\',' + js(x.id) + ')"' : x.turno ? ' onclick="turnoRegistrar(' + js(x.turno) + ')"' : '') + '>' + (x.hecha ? '✓ ' : '') + esc(x.txt) + '</div>').join('') + '</td>'; }).join('') + '</tr>').join('') +
+      '</tbody></table></div><p class="note" style="margin-top:-4px">Pase el mouse sobre cada ícono para ver quién es. Para reasignar, arrastre la labor a la fila de otra persona (en el teléfono: mantenga apretado y arrastre); a ❔ queda sin asignar, y a 🗑️ se quita. La revisión de ingresos se registra tocándola. ✓ hecho · en rojo, atrasado. <a href="javascript:void 0" onclick="verQuitadas()">Ver labores quitadas</a></p>';
     const desde = (() => { const d = new Date(l0); d.setDate(d.getDate() - 7); return isoD(d); })(), hasta = (() => { const d = new Date(l0); d.setDate(d.getDate() + 13); return isoD(d); })();
     // la revisión de ingresos (lunes y jueves) vive en el calendario: se asigna arrastrando y se registra tocándola
     return h;
@@ -5490,30 +5495,53 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   });
   // solo se puede soltar en la fila de alguien que tiene el rol de esa labor (EQUIPO · rol)
   const faseItem = it => it.dataset.turno ? 'revision' : (it.dataset.fz || '');
-  const puede = (it, n) => { const f = faseItem(it); return !!n && !!f && deFase(f).includes(n); };
+  const puede = (it, n) => { const f = faseItem(it); return !!f && (n === '' || deFase(f).includes(n)); };
   const NOMBRE_FASE = {revision: 'Revisión de ingresos', hospital: 'Seguimiento hospitalario', gestion: 'Gestión de Casos'};
   function empezar() { document.querySelectorAll('table.agenda tr[data-persona]').forEach(r => r.classList.toggle('no-drop', !puede(ARR.it, r.dataset.persona)));
+    if (!document.getElementById('ag-papelera')) document.body.insertAdjacentHTML('beforeend', '<div id="ag-papelera">🗑️ Soltar aquí para quitar<br><span>se puede recuperar</span></div>');
     const it = ARR.it, g = it.cloneNode(true); g.className = 'ag ag-fant'; g.style.borderLeftColor = it.style.borderLeftColor; document.body.appendChild(g); ARR.g = g; it.classList.add('ag-orig'); document.body.classList.add('arrastrando'); }
   const filaEn = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest && el.closest('table.agenda tr[data-persona]'); };
   document.addEventListener('pointermove', e => {
     if (!ARR || e.pointerId !== ARR.id) return;
     if (!ARR.on) { if (ARR.tipo === 'mouse' && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > 6) { ARR.on = true; empezar(); } else { if (ARR.t && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > 10) { clearTimeout(ARR.t); ARR = null; } return; } }
     e.preventDefault(); ARR.g.style.left = (e.clientX + 8) + 'px'; ARR.g.style.top = (e.clientY + 8) + 'px';
+    const pp = document.getElementById('ag-papelera'); if (pp) { const r = pp.getBoundingClientRect(); pp.classList.toggle('sobre', e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom); }
     document.querySelectorAll('table.agenda tr.drop').forEach(r => r.classList.remove('drop')); const f = filaEn(e.clientX, e.clientY); if (f && puede(ARR.it, f.dataset.persona)) f.classList.add('drop');
   }, {passive: false});
   function soltar(e) {
     if (!ARR || e.pointerId !== ARR.id) return; const A = ARR; ARR = null; clearTimeout(A.t);
     document.querySelectorAll('table.agenda tr.drop,table.agenda tr.no-drop').forEach(r => r.classList.remove('drop', 'no-drop')); document.body.classList.remove('arrastrando');
     if (!A.on) return; if (A.g) A.g.remove(); A.it.classList.remove('ag-orig');
-    const f = filaEn(e.clientX, e.clientY), n = f && f.dataset.persona; window.__agNoClic = true; setTimeout(() => { window.__agNoClic = false; }, 300);
-    if (!n) return;
-    if (!puede(A.it, n)) { toast(nomC(n) + ' no tiene el rol de ' + (NOMBRE_FASE[faseItem(A.it)] || 'esa labor') + ' (hoja EQUIPO): no se reasignó.', 5000); return; }
+    const papel = document.getElementById('ag-papelera'), sobreP = papel && (() => { const r = papel.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; })();
+    if (papel) papel.remove();
+    window.__agNoClic = true; setTimeout(() => { window.__agNoClic = false; }, 300);
+    if (sobreP) { eliminarLabor(A.it); return; }
+    const f = filaEn(e.clientX, e.clientY); if (!f) return; const n = f.dataset.persona || '';
+    if (!puede(A.it, n)) { toast((n ? nomC(n) : 'Esa fila') + ' no tiene el rol de ' + (NOMBRE_FASE[faseItem(A.it)] || 'esa labor') + ' (hoja EQUIPO): no se reasignó.', 5000); return; }
     if (A.it.dataset.turno) { turnoAsignar(A.it.dataset.turno, n); return; }
     const p = pac(A.it.dataset.id), campo = CAMPO_FASE[A.it.dataset.fz]; if (!p || !campo || p[campo] === n) return;
     const reg = {id: p.id, actualizado: ahora()}; reg[campo] = n; Object.assign(p, reg);
-    guardar([{tabla: 'PACIENTES', registro: reg}], 'Asignado a ' + nomC(n)); render();
+    guardar([{tabla: 'PACIENTES', registro: reg}], n ? 'Asignado a ' + nomC(n) : 'Quedó sin asignar'); render();
   }
-  document.addEventListener('pointerup', soltar); document.addEventListener('pointercancel', e => { if (ARR && e.pointerId === ARR.id) { clearTimeout(ARR.t); if (ARR.g) ARR.g.remove(); ARR.it.classList.remove('ag-orig'); ARR = null; document.body.classList.remove('arrastrando'); } });
+  // quitar (y recuperar): la revisión de ingresos queda «eliminada»; la tarea de un paciente queda «no aplica». Nada se borra de la planilla.
+  window.eliminarLabor = it => {
+    if (it.dataset.turno) { const t = turnos(it.dataset.turno, it.dataset.turno)[0]; DB.REV_INGRESOS = DB.REV_INGRESOS || [];
+      guardar([{tabla: 'REV_INGRESOS', registro: {id_rev: t.id_rev, fecha: t.fecha, dia: t.dia, desde: t.desde, hasta: t.hasta, asignado: t.asignado || '', estado: 'eliminada', actualizado: ahora()}}], 'Revisión quitada (se puede recuperar)'); return; }
+    const cl = it.dataset.clave, t = (DB.TAREAS || []).find(x => x.clave === cl); if (!t) return;
+    const hp = 'quitada · ' + (nombreUsuario() || 'sin nombre'); t.estado = 'no aplica'; t.hecho_por = hp; guardar([{tabla: 'TAREAS', registro: {clave: cl, estado: 'no aplica', hecho_por: hp, actualizado: ahora()}}], 'Tarea quitada (se puede recuperar)'); render();
+  };
+  window.verQuitadas = () => {
+    const tu = (DB.REV_INGRESOS || []).filter(t => t.estado === 'eliminada').sort((a, b) => a.fecha < b.fecha ? 1 : -1);
+    const ta = (DB.TAREAS || []).filter(t => t.estado === 'no aplica' && /^quitada/.test(t.hecho_por || '') && pac(t.id_paciente));
+    const fila = (txt, on) => '<div class="li"><div class="tx">' + txt + '</div><button class="btn sm sec" onclick="' + on + '">Recuperar</button></div>';
+    modal('<h2>Labores quitadas</h2><p class="note">Al recuperarlas vuelven al calendario como pendientes.</p><div class="lista">' +
+      (tu.map(t => fila('Revisar ingresos ' + dm(t.desde) + '–' + dm(t.hasta) + ' <span class="note">· ' + esc(t.dia || '') + ' ' + dm(t.fecha) + '</span>', 'recuperarTurno(' + js(t.fecha) + ')')).join('') +
+       ta.map(t => { const p = pac(t.id_paciente), f0 = P(t.n); return fila(esc((IDENT[p.id] || {}).nombre || p.id) + ' · ' + esc((NOMBRE_SIMPLE[f0.id_nodo] || tareaCorta(f0)) + (t.hito ? ' ' + hitoTxt(t.hito) : '')) + (t.fecha_debida ? ' <span class="note">· ' + dm(t.fecha_debida) + '</span>' : ''), 'recuperarTarea(' + js(t.clave) + ')'); }).join('') ||
+       '<p class="note">No hay labores quitadas.</p>') + '</div><div class="row" style="margin-top:12px"><button class="btn sec" onclick="cerrar()">Cerrar</button></div>');
+  };
+  window.recuperarTurno = f => { const t = (DB.REV_INGRESOS || []).find(x => x.fecha === f); if (!t) return; t.estado = ''; cerrar(); guardar([{tabla: 'REV_INGRESOS', registro: {id_rev: t.id_rev, estado: '', actualizado: ahora()}}], 'Revisión recuperada'); render(); };
+  window.recuperarTarea = cl => { const t = (DB.TAREAS || []).find(x => x.clave === cl); if (!t) return; t.estado = 'pendiente'; t.hecho_por = ''; cerrar(); guardar([{tabla: 'TAREAS', registro: {clave: cl, estado: 'pendiente', hecho_por: '', actualizado: ahora()}}], 'Tarea recuperada'); render(); };
+  document.addEventListener('pointerup', soltar); document.addEventListener('pointercancel', e => { const pp = document.getElementById('ag-papelera'); if (pp) pp.remove(); if (ARR && e.pointerId === ARR.id) { clearTimeout(ARR.t); if (ARR.g) ARR.g.remove(); ARR.it.classList.remove('ag-orig'); ARR = null; document.body.classList.remove('arrastrando'); } });
   document.addEventListener('click', e => { if (window.__agNoClic && e.target.closest && e.target.closest('table.agenda')) { e.stopPropagation(); e.preventDefault(); } }, true);
   const stAg = document.createElement('style');
   stAg.textContent = '.ag-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0 10px}.ag-nav{display:flex;gap:6px;align-items:center}.ag-nav b{min-width:120px;text-align:center}' +
@@ -5521,14 +5549,14 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     '.ag-p.con{background:#FFF4D6;border-color:#E8C76A}.ag-p.venc{background:#FCE8E6;border-color:#E7B2AD}.ag-p.sin{opacity:.55}' +
     'table.agenda{table-layout:fixed}table.agenda td.pn{text-align:center;cursor:default}table.agenda th.fin,table.agenda td.fin{background:#FAFBFC}table.agenda th.hoy,table.agenda td.hoy{background:#FFF8E1}' +
     '.ag[data-arr]{cursor:grab;touch-action:pan-y}.ag-fant{position:fixed;z-index:80;pointer-events:none;width:150px;box-shadow:0 6px 18px rgba(14,42,71,.3);background:#fff;opacity:.95}.ag-orig{opacity:.35}' +
-    'body.arrastrando{user-select:none;cursor:grabbing}table.agenda tr.drop td{background:#E6F4F1!important}table.agenda tr.no-drop td{opacity:.35}table.agenda tr.drop td.pn{box-shadow:inset 4px 0 0 var(--teal)}' +
+    'body.arrastrando{user-select:none;cursor:grabbing}table.agenda tr.drop td{background:#E6F4F1!important}table.agenda tr.no-drop td{opacity:.35}#ag-papelera{position:fixed;right:20px;bottom:90px;z-index:79;background:#fff;border:2px dashed #B3261E;color:#B3261E;border-radius:14px;padding:14px 18px;font-weight:700;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18)}#ag-papelera span{font-weight:400;font-size:12px}#ag-papelera.sobre{background:#FCE8E6;transform:scale(1.06)}table.agenda tr.drop td.pn{box-shadow:inset 4px 0 0 var(--teal)}' +
     '.ag{font-size:12px;cursor:pointer;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ag.hecha{opacity:.55}.ag.venc{background:#FCE8E6}.ag-sa{font-size:15px}';
   document.head.appendChild(stAg);
   // Hoy: la revisión de ingresos del día va arriba
   const vh1 = vHoy;
   vHoy = function () {
     const h = vh1.apply(this, arguments), t = turnos(hoy(), hoy())[0];
-    if (!t || t.estado === 'hecha') return h;
+    if (!t || t.estado === 'hecha' || t.estado === 'eliminada') return h;
     return '<div class="card" style="border-left:6px solid ' + ETAPA_COLOR.ingreso + '"><div class="row" style="justify-content:space-between"><div><b>Hoy toca revisar ingresos</b> <span class="note">(' + dm(t.desde) + '–' + dm(t.hasta) + ')</span><div>' + (t.asignado ? avatarDe(t.asignado) + ' ' + esc(nomC(t.asignado)) : '<span class="chip c-venc">sin asignar</span>') + '</div></div><button class="btn" onclick="turnoRegistrar(' + js(t.fecha) + ')">Registrar revisión</button></div></div>' + h;
   };
 
@@ -5833,7 +5861,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       modal('<h2>Primero, el folleto de alta</h2><p>La Atención 1 se hace con el folleto de alta impreso en la mano: con él se hace el teach-back.</p>' +
         '<ol><li>Abrir el <b>resumen de alta</b> de ' + quienTxt0(p) + ', pegar la epicrisis y revisar.</li><li><b>Folleto para imprimir</b> (cuadernillo) e imprimirlo.</li><li>Volver aquí para la Atención 1.</li></ol>' +
         '<div class="row" style="margin-top:12px"><button class="btn" onclick="cerrar();abrirAlta(' + js(id) + ')">Ir al resumen de alta</button><button class="btn sec" onclick="marcarFolleto(' + js(id) + ')">Ya está impreso</button><button class="btn sec" onclick="cerrar()">Cancelar</button></div>' +
-        '<p class="note" style="margin-top:12px"><a href="javascript:void 0" onclick="window.__sinFolleto=' + esc(js(id)) + ';cerrar();abrirEval(\'A1\',' + esc(js(id)) + ')">Seguir sin folleto</a> (por ejemplo, alta apresurada: anótelo en los comentarios).</p>');
+        '<p class="note" style="margin-top:12px"><a href="javascript:void 0" onclick="window.__sinFolleto=' + js(id) + ';cerrar();abrirEval(\'A1\',' + js(id) + ')">Seguir sin folleto</a> (por ejemplo, alta apresurada: anótelo en los comentarios).</p>');
       return;
     }
     return ae0.apply(this, arguments);
@@ -5846,8 +5874,8 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       if (VISTA === 'alta' && window.ALTA_ID && !$('#ra_fol')) {
         const bt = [...document.querySelectorAll('#app button')].find(b => /cuadernillo/.test(b.textContent));
         if (bt) bt.parentElement.insertAdjacentHTML('afterend', '<div id="ra_fol" class="card" style="border-left:6px solid ' + (tieneFolleto(window.ALTA_ID) ? 'var(--grn)' : 'var(--amb)') + '">' +
-          (tieneFolleto(window.ALTA_ID) ? '<b>Folleto impreso el ' + dm(CONTACTO[window.ALTA_ID].folleto) + '.</b> Siguiente paso: <a href="javascript:void 0" onclick="abrirEval(\'A1\',' + esc(js(window.ALTA_ID)) + ')">Atención 1 y teach-back</a>.'
-            : '<b>Después de imprimir el folleto:</b> <button class="btn sm" onclick="marcarFolleto(' + esc(js(window.ALTA_ID)) + ')">Marcar folleto impreso</button> <span class="note">y siga con la Atención 1.</span>') + '</div>');
+          (tieneFolleto(window.ALTA_ID) ? '<b>Folleto impreso el ' + dm(CONTACTO[window.ALTA_ID].folleto) + '.</b> Siguiente paso: <a href="javascript:void 0" onclick="abrirEval(\'A1\',' + js(window.ALTA_ID) + ')">Atención 1 y teach-back</a>.'
+            : '<b>Después de imprimir el folleto:</b> <button class="btn sm" onclick="marcarFolleto(' + js(window.ALTA_ID) + ')">Marcar folleto impreso</button> <span class="note">y siga con la Atención 1.</span>') + '</div>');
       }
     } catch (e) {}
     return out;
@@ -6167,6 +6195,68 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     '.psec>summary h2{margin:6px 0 10px;display:inline}.psec>summary:after{content:"▾";color:var(--gray);font-size:14px;transition:transform .2s}.psec:not([open])>summary:after{transform:rotate(-90deg)}';
   document.head.appendChild(st);
   if (DB && usa() && UNI.includes(VISTA)) render();
+})();
+</script>
+<script>
+// ============================================================ v22 · 22-oct-2026 · ¿Quién eres? al entrar (como el inicio de sesión de un Mac) y saludo con sus pendientes
+(function () {
+  const K = 'vigia_visto';
+  const vistoDe = n => { try { return (JSON.parse(localStorage.getItem(K) || '{}') || {})[n] || ''; } catch (e) { return ''; } };
+  const marcarVisto = n => { try { const o = JSON.parse(localStorage.getItem(K) || '{}') || {}; o[n] = ahora(); localStorage.setItem(K, JSON.stringify(o)); } catch (e) {} };
+  const nom1 = n => String(n || '').replace(/\s*\(ejemplo\)/, '').trim();
+  const pila = n => nom1(n).split(/\s+/)[0];
+  function login() {
+    const eq = ((DB && DB.EQUIPO) || []).filter(e => e.activo !== 'no');
+    if (!eq.length) return;
+    let el = document.getElementById('login'); if (el) el.remove();
+    const yo = AUTH.nombre || '';
+    document.body.insertAdjacentHTML('beforeend', '<div id="login" role="dialog" aria-label="¿Quién eres?"><div class="lg-in">' +
+      '<img class="lg-logo" src="' + (typeof LOGO_SIMBOLO !== 'undefined' ? LOGO_SIMBOLO : '') + '" alt=""><div class="lg-m"><b>VIGÍA</b><span>portal de seguimiento</span></div><div class="lg-t">¿Quién eres?</div>' +
+      '<div class="lg-g">' + eq.map((e, i) => '<button class="lg-p' + (e.persona === yo ? ' yo' : '') + '" style="animation-delay:' + (0.05 * i).toFixed(2) + 's" data-n="' + esc(e.persona) + '">' +
+        '<span class="lg-a">' + avatarDe(e.persona).replace(/ title="[^"]*"/, '') + '</span><b>' + esc(nom1(e.persona)) + '</b><small>' + esc((vigiaRolesDe(e.persona)[0]) || e.rol || '') + '</small></button>').join('') + '</div>' +
+      '<button class="lg-s" id="lg-sin">Entrar sin elegir</button></div></div>');
+    el = document.getElementById('login');
+    el.querySelectorAll('.lg-p').forEach(b => b.onclick = () => entrar(b.dataset.n));
+    el.querySelector('#lg-sin').onclick = () => { el.classList.add('fuera'); setTimeout(() => el.remove(), 350); };
+  }
+  function entrar(n) {
+    AUTH.nombre = n; guardarAuth(); try { pintarUsuario(); } catch (e) {}
+    const el = document.getElementById('login'); if (el) { el.classList.add('fuera'); setTimeout(() => el.remove(), 350); }
+    const antes = vistoDe(n); marcarVisto(n);
+    const L = (typeof vigiaPendientesDe === 'function' ? vigiaPendientesDe(n) : []), d0 = hoy();
+    const hoyL = L.filter(x => x.fecha <= d0), prox = L.filter(x => x.fecha > d0);
+    const nuevo = x => antes && x.act && String(x.act) > antes;
+    const li = x => '<div class="sl-i' + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + '"' +
+      (x.id ? ' onclick="cerrar();ir(\'caso\',' + js(x.id) + ')"' : x.turno ? ' onclick="cerrar();turnoRegistrar(' + js(x.turno) + ')"' : '') + '>' +
+      (nuevo(x) ? '<span class="sl-n">nuevo</span>' : '') + esc(x.txt) + (x.fecha > d0 ? ' <span class="note">· ' + dm(x.fecha) + '</span>' : '') + '</div>';
+    const roles = vigiaRolesDe(n);
+    setTimeout(() => {
+      modal('<div class="saludo"><div class="sl-h">' + avatarDe(n) + '<div><h2 style="margin:0">Hola, ' + esc(pila(n)) + ' 👋</h2><div class="note">' + esc(roles.join(' · ') || '') + '</div></div></div>' +
+        (L.some(nuevo) ? '<div class="sl-av">Tienes labores nuevas asignadas desde tu última visita.</div>' : '') +
+        '<h3>Para hoy' + (hoyL.length ? ' · ' + hoyL.length : '') + '</h3>' + (hoyL.length ? hoyL.map(li).join('') : '<p class="note">Nada pendiente para hoy. 🎉</p>') +
+        (prox.length ? '<h3>Próximos 7 días · ' + prox.length + '</h3>' + prox.map(li).join('') : '') +
+        '<div class="row" style="margin-top:14px"><button class="btn" onclick="cerrar();ir(\'panel\')">Ir al inicio</button><button class="btn sec" onclick="cerrar();quienSoy()">No soy ' + esc(pila(n)) + '</button></div></div>');
+    }, 380);
+  }
+  window.quienSoy = login;
+  const st = document.createElement('style');
+  st.textContent = '#login{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 30%,#1B4A6E 0%,#0E2A47 55%,#081A2E 100%);color:#fff;animation:lgIn .5s ease both;overflow:auto;padding:20px}' +
+    '#login.fuera{animation:lgOut .35s ease both}.lg-in{text-align:center;max-width:760px;width:100%}.lg-logo{width:64px;height:64px;background:#fff;border-radius:50%;padding:6px;box-shadow:0 0 0 6px rgba(255,255,255,.08);animation:lgEntra 1.2s cubic-bezier(.2,.8,.2,1) both}' +
+    'header h1{display:none}.lg-m{margin-top:12px;line-height:1}.lg-m b{display:block;font-size:56px;font-weight:800;letter-spacing:6px}.lg-m span{display:block;font-size:13px;letter-spacing:3px;text-transform:uppercase;opacity:.7;margin-top:6px}' +
+    '.lg-t{font-size:20px;font-weight:500;margin:26px 0 22px;letter-spacing:.2px;opacity:.95}.lg-g{display:flex;flex-wrap:wrap;gap:22px;justify-content:center}' +
+    '.lg-p{background:none;border:0;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;width:112px;padding:6px;border-radius:14px;animation:lgP .5s cubic-bezier(.2,.8,.2,1) both;font:inherit}' +
+    '.lg-p:hover,.lg-p:focus-visible{background:rgba(255,255,255,.08);outline:none}.lg-p:hover .lg-a{transform:scale(1.07)}.lg-p b{font-size:14px;font-weight:600;line-height:1.2}.lg-p small{font-size:11.5px;opacity:.7;line-height:1.2}' +
+    '.lg-a{width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.95);display:flex;align-items:center;justify-content:center;transition:transform .2s;box-shadow:0 6px 20px rgba(0,0,0,.25)}.lg-a .av{width:auto;height:auto;background:none;font-size:42px}' +
+    '.lg-p.yo .lg-a{box-shadow:0 0 0 3px #5FD3C4,0 6px 20px rgba(0,0,0,.25)}.lg-s{margin-top:28px;background:none;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:999px;padding:7px 16px;font:inherit;font-size:13px;cursor:pointer;opacity:.85}' +
+    '@keyframes lgIn{from{opacity:0}to{opacity:1}}@keyframes lgOut{to{opacity:0;transform:scale(1.04)}}@keyframes lgP{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:none}}' +
+    '.saludo .sl-h{display:flex;gap:12px;align-items:center;margin-bottom:8px}.saludo .sl-h .av{width:2.2em;height:2.2em;font-size:26px}.saludo h3{font-size:15px;margin:14px 0 6px;color:var(--navy)}' +
+    '.sl-i{border-left:4px solid #999;background:#F6F8FA;border-radius:6px;padding:7px 10px;margin:0 0 6px;cursor:pointer;font-size:14px}.sl-i.venc{background:#FCE8E6}.sl-i:hover{background:#EEF3F6}' +
+    '.sl-n{background:#1B7A86;color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:1px 7px;margin-right:6px}.sl-av{background:#E6F4F1;border-radius:8px;padding:8px 10px;font-size:14px;margin:6px 0}' +
+    '@media (prefers-reduced-motion:reduce){#login,.lg-p,.lg-logo{animation:none!important}}';
+  document.head.appendChild(st);
+  // al abrir el portal: una vez por sesión del navegador, apenas estén los datos
+  let ya = false; try { ya = sessionStorage.getItem('vigia_login') === '1'; } catch (e) {}
+  const espera = setInterval(() => { if (ya) return clearInterval(espera); if (DB && DB.EQUIPO && DB.EQUIPO.length) { clearInterval(espera); ya = true; try { sessionStorage.setItem('vigia_login', '1'); } catch (e) {} login(); } }, 300);
 })();
 </script>
 </body>
