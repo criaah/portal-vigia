@@ -4877,7 +4877,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     const f = Object.assign({}, datos(tareaN(p.id, 'T1')), datos(tareaN(p.id, 'T4')));
     const alta = p.fecha_alta || f.fecha_alta || '', dpa = alta && alta <= hoy() ? dif(hoy(), alta) : null;
     const est = p.fecha_ingreso && alta ? dif(alta, p.fecha_ingreso) : null;
-    const dx = String(A.dx || '').split('\n').map(x => x.trim()).filter(Boolean);
+    const dx = (A.dx ? String(A.dx).split('\n') : String(f.dx || '').split(/\n|,\s*/)).map(x => x.trim()).filter(Boolean);
     // EN SUMA: quién es, por qué estuvo, cómo salió y en qué va
     let s = 'EN SUMA: ' + (nomCorto(I.nombre) || p.id) + (A.edad ? ', ' + A.edad + ' años' : '');
     s += alta && alta <= hoy() ? ', egresó de la UGA el ' + dm(alta) + (est !== null ? ' (' + est + ' días)' : '') : alta ? ', con alta prevista el ' + dm(alta) : ', hospitalizado en UGA desde el ' + dm(p.fecha_ingreso);
@@ -5465,6 +5465,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const ingresosEn = t => DB.PACIENTES.filter(p => p.fecha_ingreso >= t.desde && p.fecha_ingreso <= t.hasta);
   const estadoTurno = t => t.estado === 'hecha' ? (t.n_ingresos === '0' || t.sin_ingresos ? ['sin ingresos', 'c-ok'] : ['revisada · ' + (t.n_agregados || 0) + ' agregado' + (t.n_agregados === '1' ? '' : 's'), 'c-ok']) : t.fecha < hoy() ? ['sin registrar', 'c-venc'] : t.fecha === hoy() ? ['hoy', 'c-hoy'] : ['pendiente', 'c-pend'];
   window.turnoAsignar = (f, n) => { const t = turnos(f, f)[0]; DB.REV_INGRESOS = DB.REV_INGRESOS || []; guardar([{tabla: 'REV_INGRESOS', registro: {id_rev: t.id_rev, fecha: f, dia: t.dia, desde: t.desde, hasta: t.hasta, asignado: n, actualizado: ahora()}}], n ? 'Revisión asignada a ' + nomC(n) : 'Asignación quitada'); };
+  window.vigiaTurno = f => turnos(f, f)[0];
   window.turnoRegistrar = f => {
     DB.REV_INGRESOS = DB.REV_INGRESOS || [];
     const t = turnos(f, f)[0], ag = ingresosEn(t).length;
@@ -6418,6 +6419,106 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   st.textContent = '.gl{border-left:6px solid var(--teal,#1B7A86)}.gl-tel{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.gl-tel .btn{font-size:18px;padding:10px 16px;text-decoration:none}' +
     '.gl-dat{margin-top:8px;font-size:14px;display:grid;gap:2px}.gl-dat .note{display:inline-block;min-width:70px}.gl-p{margin-top:10px}.gl-p>summary{cursor:pointer}.gl-s{margin:10px 0 0}.gl-h{display:flex;gap:8px;align-items:center;font-weight:700;color:var(--navy,#0E2A47);cursor:pointer}.gl-h input{width:18px;height:18px;margin:0}' +
     '.gl-o{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}.gl-ok{white-space:nowrap;font-size:13px;color:var(--gray,#5B6875);display:flex;gap:4px;align-items:center}.gl-ok input{width:16px;height:16px;margin:0}.gl-s ul{margin:4px 0 0 26px;padding:0}.gl-s li{margin:2px 0;font-size:14px;line-height:1.4}';
+  document.head.appendChild(st);
+})();
+</script>
+<script>
+// ============================================================ v24 · 22-oct-2026 · agregar pacientes rápido: lo mínimo de la revisión de ingresos, el resto se completa después
+// Pedido de Enfermería UGA: anotar lo que se sabe al revisar (nombre, cama, Barthel, diagnóstico) sin bloquearse por el RUT o el Barthel actual.
+(function () {
+  const F0 = typeof nuevoPaciente === 'function' ? nuevoPaciente : null;
+  const fila = (i, fi) => '<div class="ar-f card" data-i="' + i + '"><div class="ar-h"><b>Paciente ' + (i + 1) + '</b><span class="ar-r note" id="ar_r' + i + '"></span></div><div class="ar-g">' +
+    '<div class="ar-w"><label>Nombre *</label><input class="ar-nombre" placeholder="Alicia Baeza"></div>' +
+    '<div><label>Sala y cama</label><input class="ar-cama" placeholder="UGA 1 · G6"></div>' +
+    '<div><label>Barthel basal *</label><input class="ar-bb" type="number" min="0" max="100" step="5" placeholder="75"></div>' +
+    '<div><label>Barthel actual</label><input class="ar-ba" type="number" min="0" max="100" step="5" placeholder="si lo sabe"></div>' +
+    '<div class="ar-w"><label>Diagnóstico</label><input class="ar-dx" placeholder="Tumor de colon, TVP"></div>' +
+    '<div><label>Fecha de ingreso</label><input class="ar-fi" type="date" value="' + esc(fi) + '"></div>' +
+    '<div><label>Posible alta</label><input class="ar-fa" type="date"></div>' +
+    '<div><label>RUT</label><input class="ar-rut" placeholder="después, si no lo tiene"></div>' +
+    '<div class="ar-w ar-cac" hidden><label>No cumple el criterio: ¿por qué agregarlo igual?</label><input class="ar-mot" placeholder="motivo (caso a caso)"></div></div></div>';
+  function leer(el) {
+    const v = c => (el.querySelector('.ar-' + c) || {}).value || '';
+    return {nombre: v('nombre').trim(), unidad: v('cama').trim(), bb: v('bb'), ba: v('ba'), dx: v('dx').trim(), fi: v('fi'), fa: v('fa'), rut: v('rut').trim(), mot: v('mot').trim()};
+  }
+  function evaluar(el) {
+    const d = leer(el), i = el.dataset.i, r = reglaEntrada({barthel_basal: d.bb, barthel_actual: d.ba}), out = $('#ar_r' + i), cac = el.querySelector('.ar-cac');
+    if (!d.ba) { out.textContent = d.bb ? 'el Barthel actual se completa en la prealta' : ''; cac.hidden = true; return r; }
+    out.textContent = r.entra === 'sí' ? '✓ cumple (' + r.motivo + ')' : r.entra === 'no' ? '✕ ' + r.motivo : r.motivo;
+    out.style.color = r.entra === 'sí' ? 'var(--grn,#2F855A)' : r.entra === 'no' ? 'var(--red,#C53030)' : '';
+    cac.hidden = r.entra !== 'no'; return r;
+  }
+  window.agregarRapido = (n, desdeTurno) => {
+    n = Math.max(1, Math.min(8, Number(n) || 1));
+    const fi = desdeTurno ? desdeTurno.hasta : hoy();
+    modal('<h2>Agregar ' + (n > 1 ? n + ' pacientes' : 'paciente') + '</h2><p class="note">Anote lo que sabe. Lo obligatorio es el nombre y el Barthel basal. El RUT y el Barthel actual se pueden completar después ' +
+      '(RUT en «Ver o corregir» del paciente; Barthel actual en la revisión prealta).</p><div id="ar_l">' + [...Array(n)].map((_, i) => fila(i, fi)).join('') + '</div>' +
+      '<div class="row" style="margin:6px 0 10px"><button class="btn sm sec" id="ar_mas">+ otro paciente</button><a href="javascript:void 0" class="note" onclick="cerrar();__np0()">Formulario completo (pegar evolución de TrakCare)</a></div>' +
+      '<div id="ar_err"></div><div class="row"><button class="btn" id="ar_ok">Agregar</button><button class="btn sec" onclick="cerrar()">Cancelar</button></div>');
+    const conecta = el => el.querySelectorAll('input').forEach(x => x.addEventListener('input', () => evaluar(el)));
+    document.querySelectorAll('.ar-f').forEach(conecta);
+    $('#ar_mas').onclick = () => { const k = document.querySelectorAll('.ar-f').length; $('#ar_l').insertAdjacentHTML('beforeend', fila(k, fi)); conecta(document.querySelector('.ar-f[data-i="' + k + '"]')); };
+    $('#ar_ok').onclick = async () => {
+      const filas = [...document.querySelectorAll('.ar-f')].map(el => ({el, d: leer(el), r: evaluar(el)})).filter(x => x.d.nombre || x.d.bb || x.d.dx);
+      const err = [];
+      filas.forEach((x, k) => {
+        const q = 'Paciente ' + (Number(x.el.dataset.i) + 1);
+        if (!x.d.nombre) err.push(q + ': falta el nombre');
+        if (x.d.bb === '') err.push(q + ': falta el Barthel basal');
+        if (x.d.rut && !rutValidoCli(x.d.rut)) err.push(q + ': el RUT no es válido (déjelo en blanco si no lo tiene)');
+        if (x.r.entra === 'no' && !x.d.mot) err.push(q + ': no cumple el criterio; escriba el motivo para agregarlo caso a caso');
+        if (!x.d.fi) err.push(q + ': falta la fecha de ingreso');
+      });
+      if (!filas.length) err.push('Complete al menos un paciente.');
+      if (err.length) { $('#ar_err').innerHTML = '<div class="alert">' + err.map(esc).join('<br>') + '</div>'; return; }
+      const pref = DB.cfg.prefijo_id || 'VG-', nums = DB.PACIENTES.filter(p => p.id.indexOf(pref) === 0).map(p => Number((p.id.slice(pref.length).match(/^(\d+)$/) || [0, NaN])[1])).filter(x => !isNaN(x) && x < 900);
+      let sig = Math.max(0, ...nums) + 1;
+      cerrar();
+      const quien = nombreUsuario();
+      for (const x of filas) {
+        const id = pref + String(sig++).padStart(3, '0'), d = x.d;
+        const p = {id, estado: 'en evaluación', unidad: d.unidad, fecha_ingreso: d.fi, fecha_alta: d.fa, creado_por: quien, creado: ahora(), actualizado: ahora()};
+        DB.PACIENTES.push(p);
+        const d1 = {barthel_basal: d.bb, barthel_actual: d.ba, fecha_alta: d.fa, dx: d.dx};
+        Object.keys(d1).forEach(k => { if (d1[k] === '') delete d1[k]; });
+        const ops = [{tabla: 'PACIENTES', accion: 'crear', registro: p}].concat(opsCrearTareas(p, INICIALES()));
+        const t1 = ops.find(o => o.tabla === 'TAREAS' && o.registro.n === nd('T1'));
+        if (t1) Object.assign(t1.registro, {estado: 'hecha', fecha_hecha: hoy(), hecho_por: quien, datos: Object.assign({fuente: 'revisión de ingresos', regla: x.r.entra, regla_motivo: x.r.motivo}, d1, d.mot ? {caso_a_caso: d.mot} : {})});
+        IDENT[id] = {rut: d.rut, nombre: d.nombre};
+        try {
+          await guardar(ops, null);
+          const real = (ULT_REN && ULT_REN[id]) || id;
+          if (real !== id) { IDENT[real] = IDENT[id]; delete IDENT[id]; }
+          await srv('api_rut', 'guardar', real, {rut: d.rut, nombre: d.nombre}, claveRutVigia()).then(r => { IDENT[real] = r; }, e => toast('Se agregó ' + real + ', pero no su nombre: ' + String(e).replace(/^Error:\s*/, ''), 8000));
+        } catch (e) { toast('No se agregó a ' + d.nombre + ': ' + e, 8000); }
+      }
+      toast(filas.length === 1 ? 'Paciente agregado' : filas.length + ' pacientes agregados', 4000);
+      render();
+    };
+  };
+  if (F0) {
+    window.__np0 = F0;
+    // «+ Agregar paciente» abre el formulario rápido; desde un candidato de la VGI sigue el formulario completo
+    nuevoPaciente = function (pre) { return pre ? F0.apply(this, arguments) : agregarRapido(1); };
+    window.nuevoPaciente = nuevoPaciente;
+  }
+  // al registrar la revisión de ingresos con «agregados al piloto», se abre el formulario con esa cantidad de filas
+  const tr0 = window.turnoRegistrar;
+  if (tr0) window.turnoRegistrar = f => {
+    tr0(f);
+    const ok = $('#tr_ok'); if (!ok) return;
+    const t = (window.vigiaTurno && vigiaTurno(f)) || {};
+    const prev = ok.onclick;
+    ok.onclick = () => {
+      const n = Number(($('#tr_a') || {}).value || 0), sin = ($('#tr_s') || {}).checked;
+      const ya = DB.PACIENTES.filter(p => t.desde && p.fecha_ingreso >= t.desde && p.fecha_ingreso <= t.hasta).length;
+      prev();
+      if (!sin && n > ya) setTimeout(() => agregarRapido(n - ya, {desde: t.desde || '', hasta: t.hasta || hoy()}), 400);
+    };
+  };
+  const st = document.createElement('style');
+  st.textContent = '.ar-f{padding:10px 12px;margin:0 0 10px}.ar-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:6px}.ar-g{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px}' +
+    '.ar-g label{font-size:12px;margin:0}.ar-w{grid-column:span 2}@media (max-width:600px){.ar-g{grid-template-columns:1fr 1fr}.ar-w{grid-column:span 2}}';
   document.head.appendChild(st);
 })();
 </script>
