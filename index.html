@@ -4920,6 +4920,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       const u = ok[ok.length - 1], d = datosC(u), q = [];
       if (d.tb_correccion) q.push(d.tb_correccion.replace(/\n+/g, '; ').replace(/\.?$/, '.'));
       if (d.hallazgos) q.push(d.hallazgos.replace(/\n+/g, '; ').replace(/\.?$/, '.'));
+      Object.keys(d).filter(k => /^com_\d/.test(k) && d[k]).sort().forEach(k => q.push(String(d[k]).trim().replace(/\s+/g, ' ').replace(/\.?$/, '.')));
       if (u.accion) q.push('Queda pendiente: ' + u.accion + (u.responsable_accion ? ' (' + u.responsable_accion + (u.plazo_accion ? ', ' + u.plazo_accion : '') + ')' : '') + '.');
       if (q.length) L.push('Última llamada (' + hitoTxt(u.hito) + ', ' + fx(u.fecha_real || u.registrado) + '): ' + q.join(' '));
     }
