@@ -4846,7 +4846,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     if (f.cfs) b.push('CFS ' + f.cfs); if (f.glim) b.push('GLIM ' + f.glim); if (f.farmacos) b.push(f.farmacos + ' fx'); if (A.cognicion) b.push(A.cognicion);
     if (b.length) L.push('Funcional: ' + b.join(' · '));
     const c = CONTACTO[p.id] || {};
-    const ct = [(c.nombre || A.contacto_nombre || '') + ((c.parentesco || A.contacto_parentesco) ? ' (' + (c.parentesco || A.contacto_parentesco) + ')' : ''), c.tel || A.contacto_tel || ''].filter(x => x.trim()).join(' ');
+    const ct = [(c.nombre || A.contacto_nombre || '') + ((c.parentesco || A.contacto_parentesco) ? ' (' + String(c.parentesco || A.contacto_parentesco).replace(/\s*\((.*?)\)/, ', $1') + ')' : ''), c.tel || A.contacto_tel || ''].filter(x => x.trim()).join(' ');
     if (ct) L.push('Contacto: ' + ct + ((c.comunicacion || A.comunicacion) ? ' · ' + (c.comunicacion || A.comunicacion) : ''));
     const t6 = tareaN(p.id, 'T6');
     if (t6 && t6.estado === 'hecha') { const a = datos(t6); L.push('A1 ' + fx(t6.fecha_hecha) + ': ' + ([tbL(a) ? 'TB ' + tbL(a) : '', a.educaciones && a.educaciones !== 'sí' ? 'educ. ' + a.educaciones : '', (c.folleto || A.folleto) ? 'folleto ✓' : ''].filter(Boolean).join(' · ') || 'hecha')); }
