@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es"><head>
+<script>
+// Portal VIGÍA en GitHub Pages: la página vive aquí y los datos siguen en la planilla de Google.
+// El enlace de la aplicación llega en el link compartido (?k=…) y queda guardado en este dispositivo.
+(function () {
+  var q = location.search, m = q.match(/[?&]k=([\w-]{20,})/), K = 'vigia_api', id = null;
+  try { id = m ? m[1] : localStorage.getItem(K); if (m) localStorage.setItem(K, m[1]); } catch (e) { id = m ? m[1] : null; }
+  var base = location.href.split(/[?#]/)[0].replace(/[^\/]*$/, '');
+  window.__BASE = base;
+  window.__API = id ? 'https://script.google.com/macros/s/' + id + '/exec' : '';
+  window.__URLAPP = id ? base + '?k=' + id + '&' : base;
+  function llamar(fn, args) {
+    if (!window.__API) return Promise.reject(new Error('Falta el enlace completo del portal: ábralo desde el link que compartió el equipo VIGÍA.'));
+    return fetch(window.__API, {method: 'POST', credentials: 'omit', redirect: 'follow', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify({fn: fn, args: args})})
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { if (j.error) throw new Error(j.error); return j.ok; });
+  }
+  function runner(ok, mal) {
+    return new Proxy({}, {get: function (_, k) {
+      if (k === 'withSuccessHandler') return function (f) { return runner(f, mal); };
+      if (k === 'withFailureHandler') return function (f) { return runner(ok, f); };
+      if (k === 'withUserObject') return function () { return runner(ok, mal); };
+      return function () { var a = [].slice.call(arguments); llamar(k, a).then(function (v) { if (ok) ok(v); }, function (e) { if (mal) mal(e); }); };
+    }});
+  }
+  var params = {};
+  q.replace(/^\?/, '').split(/[&?]/).forEach(function (p) { var i = p.indexOf('='); if (i > 0) try { params[decodeURIComponent(p.slice(0, i))] = decodeURIComponent(p.slice(i + 1)); } catch (e) {} });
+  window.google = {script: {run: runner(null, null), host: {close: function () {}},
+    url: {getLocation: function (cb) { cb({hash: location.hash.replace(/^#/, ''), parameter: params, parameters: {}}); }}}};
+  window.__PARAMS = params;
+})();
+</script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIGÍA · INGER</title>
+<style>
+:root{color-scheme:light;--azul:#14213d;--tx:#1b2430;--su:#5b6675;--li:#d9dee5;--fo:#f3f5f8;--ok:#2f855a;--al:#b7791f;--ro:#c53030}
+*{box-sizing:border-box}body{margin:0;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--tx);background:var(--fo)}
+header{background:var(--azul);color:#fff;padding:16px}header b{font-size:20px;display:block}header span{opacity:.85;font-size:14px}
+main{max-width:560px;margin:0 auto;padding:14px 16px 40px}
+.card{background:#fff;border:1px solid var(--li);border-radius:12px;padding:14px;margin:12px 0}
+.tel{font-size:26px;font-weight:700;letter-spacing:.3px}.tel a{color:var(--azul);text-decoration:none}
+.aet{border-left:5px solid var(--al)}.aet h3{margin:0 0 6px;font-size:16px}.nota{color:var(--su);font-size:14px}
+label{display:block;font-weight:600;margin:12px 0 4px}input,select,textarea{color:#1b2430;-webkit-text-fill-color:#1b2430;width:100%;font:inherit;padding:10px;border:1px solid var(--li);border-radius:8px;background:#fff}
+textarea{min-height:70px}button{width:100%;margin-top:16px;padding:14px;font:inherit;font-weight:700;color:#fff;background:var(--azul);border:0;border-radius:10px}
+button:disabled{opacity:.6}.ok{border-left:5px solid var(--ok)}.err{color:var(--ro);font-weight:600}
+.cod{font-family:ui-monospace,Menlo,monospace;font-weight:700}
+</style></head>
+<body>
+<header><b>VIGÍA · Seguimiento después del alta</b><span>Unidad Geriátrica de Agudos · Instituto Nacional de Geriatría (INGER)</span></header>
+<main>
+  <div class="card">Esta persona está en el seguimiento VIGÍA del INGER durante el primer mes después de su alta: Gestión de Casos la llama a las 48–96 horas y los días 7, 14 y 21.
+    <div style="margin-top:10px" class="nota">Gestión de Casos INGER</div><div class="tel"><a href="tel:+56989210509">+56 9 8921 0509</a></div>
+    <div class="nota">lunes a jueves, 7:30 a 15:30; viernes, 7:30 a 14:30</div></div>
+  <div id="aet"></div>
+  <div class="card" id="caja">
+    <h2 style="margin:0 0 4px;font-size:19px">Avisar una consulta</h2>
+    <div class="nota">Si atendió o acompañó a esta persona en una consulta, avísenos. El aviso llega al equipo VIGÍA. No escriba el nombre ni el RUT.</div>
+    <label for="cod">Código VIGÍA</label><input id="cod" autocomplete="off">
+    <label for="quien">Quién avisa</label><select id="quien"><option>profesional de salud</option><option>cuidador o familiar</option><option>el paciente</option></select>
+    <label for="fecha">Fecha de la consulta</label><input id="fecha" type="date">
+    <label for="donde">Dónde</label><select id="donde"><option>urgencia</option><option>APS o consultorio</option><option>SAMU</option><option>hospitalización</option><option>otro</option></select>
+    <label for="motivo">Motivo breve</label><textarea id="motivo" maxlength="300"></textarea>
+    <label for="hosp">¿Quedó hospitalizado?</label><select id="hosp"><option>no</option><option>sí</option><option>no sé</option></select>
+    <label for="tel">Teléfono de contacto (opcional)</label><input id="tel" inputmode="tel" maxlength="16">
+    <button id="env">Enviar aviso</button><div id="msg"></div>
+  </div>
+</main>
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  try{var d=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);$('fecha').value=d;$('fecha').max=d}catch(e){}
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  // lo que va después del «#»: c = código, aet = adecuación del esfuerzo terapéutico (texto breve), f = fecha, m = médico
+  function leer(h){var o={};String(h||'').replace(/^#/,'').split('&').forEach(function(p){if(!p)return;var i=p.indexOf('=');if(i<0){o.c=decodeURIComponent(p);return}o[p.slice(0,i)]=decodeURIComponent(p.slice(i+1).replace(/\+/g,' '))});return o}
+  function aplicar(h){
+    var o=leer(h);
+    if(o.c)$('cod').value=String(o.c).toUpperCase();
+    if(o.aet)$('aet').innerHTML='<div class="card aet"><h3>Adecuación del esfuerzo terapéutico registrada</h3><div>'+esc(o.aet)+'</div><div class="nota" style="margin-top:6px">'+(o.f?'Registrada el '+esc(o.f):'')+(o.m?' · '+esc(o.m):'')+'. Orientativo: confirmar en la ficha clínica.</div></div>';
+  }
+  var URL_APP=window.__API||'';if(URL_APP.indexOf('http')!==0)URL_APP='';
+  try{google.script.url.getLocation(function(l){aplicar(l.hash)})}catch(e){aplicar(location.hash)}
+  $('env').onclick=function(){
+    var a={id_paciente:$('cod').value.trim(),quien_avisa:$('quien').value,fecha:$('fecha').value,donde:$('donde').value,motivo:$('motivo').value,hospitalizado:$('hosp').value,telefono:$('tel').value};
+    if(!/^[A-Za-z]{1,4}-[A-Za-z0-9-]{1,20}$/.test(a.id_paciente)){$('msg').innerHTML='<p class="err">Revise el código VIGÍA (está en el carnet, por ejemplo VG-001).</p>';return}
+    $('env').disabled=true;$('msg').innerHTML='<p class="nota">Enviando…</p>';
+    var ok=function(){$('caja').innerHTML='<div class="ok" style="padding-left:10px"><h2 style="margin:0 0 6px;font-size:19px">Aviso recibido</h2><div>Gracias. El equipo VIGÍA lo revisará. Si es urgente, llame a Gestión de Casos o al SAMU 131.</div></div>'};
+    google.script.run.withSuccessHandler(function(){$('caja').innerHTML='<div class="ok" style="padding-left:10px"><h2 style="margin:0 0 6px;font-size:19px">Aviso recibido</h2><div>Gracias. El equipo VIGÍA lo revisará. Si es urgente, llame a Gestión de Casos o al SAMU 131.</div></div>'})
+      .withFailureHandler(function(e){var m=(e&&e.message)||String(e);
+        if(URL_APP&&/NetworkError|HTTP 0|network|Failed to fetch/i.test(m)){ // navegador que bloquea las cookies de Google: se envía por fetch
+          fetch(URL_APP,{method:'POST',credentials:'omit',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn:'avisoConsulta',args:[a]})})
+            .then(function(r){return r.json()}).then(function(j){if(j.error)throw new Error(j.error);ok()})
+            .catch(function(x){$('env').disabled=false;$('msg').innerHTML='<p class="err">'+esc((x&&x.message)||x)+'</p>'});
+          return;}
+        $('env').disabled=false;$('msg').innerHTML='<p class="err">'+esc(m)+'</p>'}).avisoConsulta(a);
+  };
+})();
+</script>
+</body></html>
