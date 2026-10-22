@@ -51,10 +51,10 @@ body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-s
 header{background:var(--navy);color:#fff;padding:8px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;position:sticky;top:0;z-index:5}
 header .logos{display:inline-flex;gap:6px;align-items:center;background:#fff;border-radius:999px;padding:3px;cursor:pointer;transition:box-shadow .3s}header .logos img{height:34px;width:34px;display:block}
 header .logos img{animation:lgFlota 4.5s ease-in-out infinite}header .logos.entra img{animation:lgEntra 1.4s cubic-bezier(.2,.8,.2,1) both}
-header .logos:hover{box-shadow:0 0 0 4px rgba(255,255,255,.28)}header .logos:hover img{animation:lgGira 3.2s linear infinite}header .logos.toca img{animation:lgToca .45s ease-out}
+header .logos{transition:transform 1.6s cubic-bezier(.4,0,.2,1),box-shadow .3s}header .logos:hover{transform:rotate(360deg);box-shadow:0 0 0 4px rgba(255,255,255,.28)}header .logos.toca{animation:lgToca .45s ease-out}
 @keyframes lgEntra{0%{opacity:0;transform:rotate(-220deg) scale(.4)}100%{opacity:1;transform:none}}@keyframes lgFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-@keyframes lgGira{to{transform:rotate(360deg)}}@keyframes lgToca{0%{transform:scale(1)}40%{transform:scale(.8) rotate(-25deg)}100%{transform:scale(1) rotate(0)}}
-@media (prefers-reduced-motion:reduce){header .logos img{animation:none!important}}
+@keyframes lgToca{0%{transform:scale(1)}40%{transform:scale(.8) rotate(-25deg)}100%{transform:scale(1) rotate(0)}}
+@media (prefers-reduced-motion:reduce){header .logos img{animation:none!important}header .logos{transition:none}}
 header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px;cursor:pointer}
 header .u{font-size:12.5px;margin-left:auto}
 header .u a{color:#fff}
@@ -4436,21 +4436,31 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const enc = (titulo, sub, id) => '<div class="enc"><div class="logos"><img src="' + LOGO_INGER + '" alt=""><img src="' + LOGO_VIGIA + '" alt=""></div><div class="tt"><div class="k">Seguimiento post-alta UGA · Portal VIGÍA</div><h1>' +
     esc(titulo) + '</h1>' + (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>' + (id ? '<div class="idbox">Código<b>' + esc(id) + '</b></div>' : '') + '</div>';
   const pie = extra => '<div class="pie">Copia de referencia, impresa desde el portal el ' + dm(hoy()) + '. Se registra en el portal (PC, teléfono o tablet), no en papel. ' +
-    'Sin nombre, RUT ni teléfono del paciente: solo el código VG.' + (extra ? ' ' + extra : '') + '</div>';
+    'Si se imprime con datos de un paciente, guárdelo como cualquier documento clínico.' + (extra ? ' ' + extra : '') + '</div>';
   const hoja = (h, cl) => '<section class="hoja' + (cl ? ' ' + cl : '') + '">' + h + '</section>';
 
   // ------------------------------------------------------------ formularios (las mismas definiciones del portal)
-  const prealta = () => FORM.T4().concat([S('activacion', '¿Entra al seguimiento? (funcional: último Barthel 40–80 · nutricional: GLIM positivo con Barthel basal >40 y actual <40)', ['sí', 'no']), T('motivo', 'Si no sigue la regla: motivo')]);
+  // quién hace cada paso: se lee del rol de cada persona en la hoja EQUIPO (igual que en el portal)
+  const deRolF = re => ((DB && DB.EQUIPO) || []).filter(e => e.activo !== 'no' && re.test(e.rol || '')).map(e => String(e.persona || '').replace(/\s*\(ejemplo\)/, ''));
+  const RE_REV = /ingreso|revisi/i, RE_HOS = /ADG|hospital|KGO|kinesi/i, RE_GES = /gesti[oó]n de casos|gestora/i;
+  const quienF = (re, fb) => { const L = deRolF(re); return L.length ? L.join(' o ') : fb; };
+  const elegir = (k, l, re) => { const L = deRolF(re); return L.length ? S(k, l, L) : T(k, l); };
+  const datosPaciente = () => [T('nombre', 'Nombre del paciente'), T('rut', 'RUT (con dígito verificador)'), T('id', 'Número VIGÍA (se asigna solo si cumple la regla v11 o caso a caso)'),
+    T('unidad', 'Sala y cama'), D('fecha_ingreso', 'Fecha de ingreso a UGA'), D('fecha_alta', 'Fecha probable de alta (si se conoce)')];
+  const prealta = () => FORM.T4().concat([S('activacion', '¿Entra al seguimiento? (lo sugiere la regla v11)', ['sí', 'no']), T('motivo', 'Si no sigue la regla: motivo')]);
   const DEFS = {
-    T1: {titulo: 'Revisión de ficha al ingreso', quien: RESP_SIMPLE.T1, cuando: 'Al ingreso (primeras 48 h)',
+    T1: {titulo: 'Revisión de ficha al ingreso', get quien() { return quienF(RE_REV, RESP_SIMPLE.T1); }, cuando: 'Al ingreso (primeras 48 h)',
       prop: 'Formulario único: se llena al ingreso y de nuevo antes del alta. Regla v11: Barthel actual 40–80 (funcional) o GLIM positivo con Barthel basal >40 y actual <40 (nutricional). ≥10 fármacos se identifica, no es criterio. Exclusiones: paliativos o enfermedad terminal, egreso con HOSDOM, traslado, hospitalización programada, sin red ni teléfono. La fractura de cadera no excluye.',
-      secciones: () => [{t: 'Datos de la ficha', campos: FORM.T1()}]},
-    T4: {titulo: 'Revisión prealta: ¿entra?', quien: RESP_SIMPLE.T4, cuando: 'Antes del alta',
+      secciones: () => [{t: 'Paciente', campos: datosPaciente()},
+        {t: 'Datos de la ficha: tamizaje y exclusiones', guia: 'Regla v11: funcional (Barthel actual 40–80) o nutricional (GLIM positivo con Barthel basal >40 y actual <40). Excluye cuidados paliativos y egreso con HOSDOM.', campos: FORM.T1().filter(c => c.k !== 'id_eval')},
+        {t: 'Decisión y equipo', campos: [T('caso_a_caso', 'Caso a caso: motivo (solo si no cumple la regla)'), elegir('rev_por', 'Revisó la ficha', RE_REV), elegir('hosp_por', 'Lo sigue en el hospital', RE_HOS)]}]},
+    T4: {titulo: 'Revisión prealta: ¿entra?', get quien() { return quienF(RE_REV, RESP_SIMPLE.T4); }, cuando: 'Antes del alta',
       prop: 'Mismo formulario que al ingreso, con lo que hay antes del alta: último Barthel (preferir el de terapia ocupacional o kinesiología). Si entra, queda para la Atención 1.',
-      secciones: () => [{t: 'Revisión prealta', campos: prealta()}]},
-    A1: {titulo: EVS.A1.nombre, quien: RESP_SIMPLE.T6, cuando: EVS.A1.cuando, prop: EVS.A1.proposito, secciones: () => EVS.A1.secciones},
+      secciones: () => [{t: 'Revisión prealta', campos: prealta()},
+        {t: 'Si entra: equipo', campos: [elegir('titular', 'Lo sigue hasta el alta', RE_HOS), elegir('gestor', 'Llamadas después del alta', RE_GES)]}]},
+    A1: {titulo: EVS.A1.nombre, get quien() { return quienF(RE_HOS, RESP_SIMPLE.T6); }, cuando: 'Antes del alta, con el folleto de alta impreso en la mano', prop: EVS.A1.proposito, secciones: () => EVS.A1.secciones},
     LL: {titulo: EVS.LL_S.nombre, quien: EVS.LL_S.quien, cuando: EVS.LL_S.cuando, prop: EVS.LL_S.proposito, secciones: () => EVS.LL_S.secciones, pauta: true},
-    T22: {titulo: 'Revisión a 30 días', quien: RESP_SIMPLE.T22, cuando: 'Día 30 desde el alta',
+    T22: {titulo: 'Revisión a 30 días', get quien() { return RESP_SIMPLE.T22; }, cuando: 'Día 30 desde el alta',
       prop: 'Revisión de la ficha clínica y del Libro de Urgencia: urgencia, hospitalización o fallecimiento en los 30 días posteriores al alta, en el INGER o en otro centro.',
       secciones: () => [{t: 'Estado a 30 días', campos: FORM.T22()}]}
   };
@@ -4553,12 +4563,11 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     } catch (e) { toast('No se pudo abrir el formulario: ' + e.message, 7000); }
   }
   const DOCS = [
-    ['T1', 'Revisión de ficha al ingreso', RESP_SIMPLE.T1, () => formulario('T1')],
-    ['T4', 'Revisión prealta: ¿entra?', RESP_SIMPLE.T4, () => formulario('T4')],
-    ['A1', 'Atención 1 antes del alta', RESP_SIMPLE.T6, () => formulario('A1')],
+    ['T1', 'Revisión de ficha al ingreso', 'Revisión de ingresos', () => formulario('T1')],
+    ['T4', 'Revisión prealta: ¿entra?', 'Revisión de ingresos', () => formulario('T4')],
+    ['A1', 'Atención 1 antes del alta', 'Seguimiento hospitalario', () => formulario('A1')],
     ['LL', 'Llamada de seguimiento + pauta de la llamada', 'Gestión de Casos', () => formulario('LL')],
     ['T22', 'Revisión a 30 días', RESP_SIMPLE.T22, () => formulario('T22')],
-    ['CAR', 'Carnet del paciente (en blanco)', 'Se entrega en la Atención 1', () => hojaCarnet(null)],
     ['GUIA', 'Cómo usar el portal (con QR)', 'Para todo el equipo', () => guia()]
   ];
   window.vigiaImp = {
@@ -4574,7 +4583,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       'Se arman con los mismos campos del portal. Para descargar, elija «Guardar como PDF» en la ventana de impresión.</p>' +
       '<div class="card lista">' + DOCS.map(d => '<div class="li"><div class="tx"><b>' + esc(d[1]) + '</b><div class="t3">' + esc(d[2]) + '</div></div><button class="btn sm" onclick="vigiaImp.doc(' + js(d[0]) + ')">Imprimir o PDF</button></div>').join('') + '</div>' +
       '<div class="row" style="margin-top:10px"><button class="btn" onclick="vigiaImp.todo()">Todo en un solo PDF</button></div>' +
-      '<p class="note" style="margin-top:12px">El plan y el carnet de cada paciente, con sus fechas de llamada, se imprimen desde su ficha (Pacientes → código VG).</p>';
+      '<p class="note" style="margin-top:12px">El plan y el folleto de alta de cada paciente, con sus fechas de llamada, se imprimen desde su ficha (Pacientes → paciente → Resumen de alta).</p>';
   }
   const render0 = render, nav0 = nav, menuMas0 = menuMas, vCasoSimple0 = vCasoSimple;
   render = function () {
