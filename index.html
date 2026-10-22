@@ -6297,6 +6297,88 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const espera = setInterval(() => { if (ya) return clearInterval(espera); if (DB && DB.EQUIPO && DB.EQUIPO.length) { clearInterval(espera); ya = true; try { sessionStorage.setItem('vigia_login', '1'); } catch (e) {} login(); } }, 300);
 })();
 </script>
+<script>
+// ============================================================ v23 · 22-oct-2026 · guía de la llamada: a quién llamar, qué decir según el paciente y qué quedó revisado (pasa sola al texto de la ficha)
+(function () {
+  const GA = {}, MARCA = {};
+  const lin = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const telHref = t => { const d = String(t || '').replace(/\D/g, ''); return d.length === 9 ? '+56' + d : d.length === 11 && d.startsWith('56') ? '+' + d : d; };
+  const pila = n => String(n || '').split(/\s+/)[0];
+  const tratamiento = (n, A) => { const s = String(n || '').trim().split(/\s+/); return s.length ? s[0] + (s.length >= 3 ? ' ' + s[s.length - 2] : s[1] ? ' ' + s[1] : '') : 'el paciente'; };
+  function cargar(id) {
+    if (GA[id] !== undefined) return;
+    GA[id] = null;
+    srv('api_alta', 'ver', id, null, typeof claveRutVigia === 'function' ? claveRutVigia() : '').then(r => { GA[id] = r || {}; if (VISTA === 'eval' && EV && EV.id === id) { const y = window.scrollY; render(); window.scrollTo(0, y); } }, () => { GA[id] = {}; });
+  }
+  // secciones de la pauta, con lo propio del paciente
+  function secciones(p, hito) {
+    const A = GA[p.id] || {}, I = IDENT[p.id] || {}, c = CONTACTO[p.id] || {}, S = [];
+    const quien = tratamiento(I.nombre), yo = pila(nombreUsuario()) || '[su nombre]';
+    const alta = p.fecha_alta ? dm(p.fecha_alta) : '';
+    S.push({k: 'saludo', t: 'Presentación', items: ['«Buenas, habla ' + yo + ', de Gestión de Casos del Instituto Nacional de Geriatría. Llamo por ' + quien + (alta ? ', que se fue de alta el ' + alta : '') + ', para saber cómo ha estado y repasar sus indicaciones. ¿Tiene unos minutos?»'].concat(A.comunicacion || c.comunicacion ? ['Ojo: ' + (A.comunicacion || c.comunicacion)] : [])});
+    const al = lin(A.alarmas);
+    S.push({k: 'sintomas', t: 'Cómo ha estado', items: ['«¿Cómo se ha sentido desde que llegó a la casa?»'].concat(al.length ? al.map(x => '¿' + x.replace(/\.$/, '') + '?') : ['Pregunte por los síntomas de su enfermedad de base.'])});
+    const rem = (A.remedios || []);
+    if (rem.length || A.suspendidos) {
+      const por = {}; rem.forEach(r => (por[r.m] = por[r.m] || []).push(r.f + (r.c ? ' — ' + r.c : '')));
+      S.push({k: 'remedios', t: 'Remedios (teach-back)', items: ['«Cuénteme qué remedios está tomando y a qué hora.» Compare con la lista:'].concat(Object.keys(por).map(m => m + ': ' + por[m].join(' · '))).concat(lin(A.suspendidos).length ? ['Ya no toma: ' + lin(A.suspendidos).join(', ') + ' (confirmar que lo dejó)'] : [])});
+    } else S.push({k: 'remedios', t: 'Remedios (teach-back)', items: ['«Cuénteme qué remedios está tomando y a qué hora.» Compare con la receta de alta.']});
+    const ctl = lin(A.controles);
+    S.push({k: 'controles', t: 'Controles (teach-back)', items: ['«¿Qué controles tiene pendientes y cuándo?»'].concat(ctl.length ? ctl : ['Compare con la epicrisis.'])});
+    const cu = lin(A.cuidados);
+    S.push({k: 'nofarm', t: 'Cuidados en casa', items: cu.length ? cu.map(x => x.split(':')[0]) : ['Alimentación, actividad y prevención de caídas.']});
+    const pend = [], a1 = datos(tareaN(p.id, 'T6'));
+    if (a1.tb_brecha) pend.push('Atención 1: ' + a1.tb_brecha);
+    [['tb_medicamentos', 'remedios'], ['tb_controles', 'controles'], ['tb_alimentacion', 'cuidados en casa']].forEach(([k, l]) => { if (/^[RP]/.test(a1[k] || '')) pend.push('Teach-back de ' + l + ' quedó en ' + String(a1[k]).split(' ')[0] + ': repetirlo'); });
+    DB.CONTACTOS.filter(x => x.id_paciente === p.id && x.resultado === 'logrado').forEach(x => { const d = typeof x.datos === 'string' ? (() => { try { return JSON.parse(x.datos); } catch (e) { return {}; } })() : (x.datos || {}); if (d.tb_correccion) pend.push(hitoTxt(x.hito) + ': ' + d.tb_correccion); });
+    const ojo = lin(A.ojo);
+    if (pend.length || ojo.length) S.push({k: 'pendientes', t: 'Pendientes y ojo con este paciente', items: pend.concat(ojo)});
+    const sig = HITOS.map(([h]) => h).filter(h => h !== hito).map(h => tarea(p.id, nd('T12'), h)).filter(t => t && t.estado === 'pendiente' && t.fecha_debida).sort((a, b) => a.fecha_debida < b.fecha_debida ? -1 : 1)[0];
+    S.push({k: 'cierre', t: 'Cierre', items: ['«Si se siente peor o tiene dudas, llame o escriba al ' + ((DB.cfg || {}).tel_equipo || '+56 9 8921 0509') + ', de lunes a viernes en horario hábil. Si es grave, al 131.»'].concat(sig ? ['«Lo vuelvo a llamar el ' + dm(sig.fecha_debida) + '.»'] : [])});
+    return S;
+  }
+  function guia(p, hito) {
+    cargar(p.id);
+    const A = GA[p.id], c = CONTACTO[p.id] || {}, M = MARCA[p.id + '|' + hito] = MARCA[p.id + '|' + hito] || {};
+    const tel = c.tel || (A && A.contacto_tel) || '', nom = [c.nombre || (A && A.contacto_nombre), c.parentesco || (A && A.contacto_parentesco)].filter(Boolean).join(', ');
+    let h = '<div class="card gl"><div class="gl-tel">' + (tel ? '<a class="btn" href="tel:' + esc(telHref(tel)) + '">📞 ' + esc(tel) + '</a><div><b>' + esc(nom || 'Contacto') + '</b>' + ((c.comunicacion || (A && A.comunicacion)) ? '<div class="note">' + esc(c.comunicacion || A.comunicacion) + '</div>' : '') + '</div>'
+      : '<div class="note">Sin teléfono registrado: complételo en el Resumen de alta.</div>') + '</div>';
+    if (A === null) return h + '<p class="note">Cargando la pauta del paciente…</p></div>';
+    h += '<details class="gl-p" open><summary><b>Pauta de la llamada</b> <span class="note">· marque lo que revisó: queda en el texto para la ficha</span></summary>' +
+      secciones(p, hito).map(s => '<div class="gl-s"><label class="gl-h"><input type="checkbox" ' + (M[s.k] ? 'checked ' : '') + 'onchange="guiaMarca(' + js(p.id) + ',' + js(hito) + ',' + js(s.k) + ',this.checked)"> ' + esc(s.t) + '</label><ul>' + s.items.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>').join('') + '</details></div>';
+    return h;
+  }
+  window.guiaMarca = (id, hito, k, v) => { (MARCA[id + '|' + hito] = MARCA[id + '|' + hito] || {})[k] = v; try { actualizarEval(); } catch (e) {} };
+  const NOM = {saludo: 'presentación y objetivo', sintomas: 'síntomas y signos de alarma', remedios: 'remedios con la receta de alta', controles: 'controles pendientes', nofarm: 'cuidados en casa', pendientes: 'pendientes previos', cierre: 'teléfono del equipo y próxima llamada'};
+  const ne0 = notaEval;
+  notaEval = function (ev, v, hito) {
+    let t = ne0.apply(this, arguments);
+    if (ev.nodo !== 'T12' || !EV) return t;
+    const M = MARCA[EV.id + '|' + (hito || '')] || {}, k = Object.keys(NOM).filter(x => M[x]);
+    if (!k.length) return t;
+    const linea = 'Pauta revisada: ' + k.map(x => NOM[x]).join(', ') + '.';
+    const i = t.indexOf('\nEN SUMA:\n');
+    if (i >= 0) { const j = t.indexOf('\n\n', i + 10); return j >= 0 ? t.slice(0, j) + '\n- ' + linea + t.slice(j) : t + '\n- ' + linea; }
+    return t + '\n\n' + linea;
+  };
+  const ve0 = vEval;
+  vEval = function () {
+    let h = ve0.apply(this, arguments);
+    try {
+      if (!EV || !EVS[EV.evId] || EVS[EV.evId].nodo !== 'T12') return h;
+      const p = pac(EV.id); if (!p) return h;
+      const i = h.indexOf('<div class="evwrap">');
+      if (i >= 0) h = h.slice(0, i) + guia(p, EV.hito || '') + h.slice(i);
+    } catch (e) {}
+    return h;
+  };
+  const st = document.createElement('style');
+  st.textContent = '.gl{border-left:6px solid var(--teal,#1B7A86)}.gl-tel{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.gl-tel .btn{font-size:18px;padding:10px 16px;text-decoration:none}' +
+    '.gl-p{margin-top:10px}.gl-p>summary{cursor:pointer}.gl-s{margin:10px 0 0}.gl-h{display:flex;gap:8px;align-items:center;font-weight:700;color:var(--navy,#0E2A47);cursor:pointer}.gl-h input{width:18px;height:18px;margin:0}' +
+    '.gl-s ul{margin:4px 0 0 26px;padding:0}.gl-s li{margin:2px 0;font-size:14px;line-height:1.4}';
+  document.head.appendChild(st);
+})();
+</script>
 </body>
 
 </html>
