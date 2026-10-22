@@ -4917,7 +4917,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     L.push('Tutor: ' + (A.tutor || (quien ? quien + ' (cuidador principal)' : 'sin registrar')));
     L.push('Dirección: ' + (A.direccion || [A.comuna, A.vive_con ? 'vive con ' + A.vive_con : ''].filter(Boolean).join(', ') || 'sin registrar (completar en Resumen de alta)') + (A.cesfam ? ' · ' + A.cesfam : ''));
     const ojo = String(A.ojo || '').split('\n').map(x => x.trim()).filter(Boolean);
-    if (ojo.length) L.push('Ojo: ' + ojo.map(x => x.replace(/^\p{Extended_Pictographic}️?\s*/u, '').replace(/\s*\([^)]*\)/g, '')).join(' | '));
+    if (ojo.length) L.push('Ojo en la llamada: ' + ojo.map(x => { x = x.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, '').trim(); return /[.!?]$/.test(x) ? x : x + '.'; }).join(' '));
     const pend = pasosSimple(p).filter(x => x.t.estado === 'pendiente' && !bloqueada(p, x.t)).slice(0, 2);
     if (pend.length) L.push('Próximo: ' + pend.map(x => x.nombre.replace(/^Llamada /, 'llamada ') + (x.t.fecha_debida ? ' ' + (x.t.fecha_debida === hoy() ? 'hoy' : fx(x.t.fecha_debida)) : '')).join('; '));
     return L.join('\n');
@@ -5097,7 +5097,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       AREA('alarmas', 'Señales de alarma para el folleto (máx. 6, palabras simples)', 'Le falta más el aire o tiene que dormir sentado.', 4),
       AREA('cuidados', 'Cuidados en casa para el folleto (máx. 5, «Título: texto»)', 'Para no caerse: use siempre el andador.', 4),
       {k: 'peso', l: 'Registro de peso diario en el folleto', t: 'sel', ops: ['no', 'sí']}]],
-    ['Para el equipo', [AREA('ojo', 'Ojo en las llamadas (uno por línea)', '⚖️ Peso diario: +2 kg en 3 días = alerta\n🩸 Anticoagulado (rivaroxabán 20 mg): sangrado, caídas', 4),
+    ['Para el equipo', [AREA('ojo', 'Ojo en las llamadas (una frase completa por línea: qué preguntar y qué hacer)', 'Pesarse cada mañana: si sube más de 2 kg en 3 días, es descompensación de la insuficiencia cardiaca y se deriva a médico post-alta.\nEstá anticoagulado con rivaroxabán: preguntar por sangrados y caídas.', 4),
       TXT('responsable', 'Responsable del caso', 'Nombre')]]];
   let ALTAID = null, ALTAERR = '';
   function campoA(c, v) {
@@ -6338,7 +6338,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     const rem = (A.remedios || []);
     if (rem.length || A.suspendidos) {
       const por = {}; rem.forEach(r => (por[r.m] = por[r.m] || []).push(r.f + (r.c ? ' — ' + r.c : '')));
-      S.push({k: 'remedios', t: 'Remedios (teach-back)', items: ['«Cuénteme qué remedios está tomando y a qué hora.» Compare con la lista:'].concat(Object.keys(por).map(m => m + ': ' + por[m].join(' · '))).concat(lin(A.suspendidos).length ? ['Ya no toma: ' + lin(A.suspendidos).join(', ') + ' (confirmar que lo dejó)'] : [])});
+      S.push({k: 'remedios', t: 'Remedios (teach-back)', items: ['«Cuénteme qué remedios está tomando y a qué hora.» Compare con la lista:'].concat(Object.keys(por).map(m => m + ': ' + por[m].join(' · '))).concat(lin(A.suspendidos).length ? ['Al alta se suspendió ' + lin(A.suspendidos).join(', ') + ': pregunte si lo dejó de tomar y que no lo siga usando de lo que tenía en casa.'] : [])});
     } else S.push({k: 'remedios', t: 'Remedios (teach-back)', items: ['«Cuénteme qué remedios está tomando y a qué hora.» Compare con la receta de alta.']});
     const ctl = lin(A.controles);
     S.push({k: 'controles', t: 'Controles (teach-back)', items: ['«¿Qué controles tiene pendientes y cuándo?»'].concat(ctl.length ? ctl : ['Compare con la epicrisis.'])});
