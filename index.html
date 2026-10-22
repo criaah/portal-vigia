@@ -6030,25 +6030,25 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   let ult = -1, timer = null, abierto = false, saltarClick = false;
   const OWL = '<svg viewBox="0 0 120 130" width="92" height="100" aria-hidden="true">' +
     '<path d="M60 10c-30 0-48 22-48 52 0 34 20 58 48 58s48-24 48-58c0-30-18-52-48-52z" fill="#0E2A47"/>' +
-    '<path d="M22 28l8 16M98 28l-8 16" stroke="#0E2A47" stroke-width="9" stroke-linecap="round"/>' +
     '<path d="M36 78c6 22 14 32 24 32s18-10 24-32c-8 6-16 9-24 9s-16-3-24-9z" fill="#E8EEF5"/>' +
+    '<g class="vg-cab"><path d="M22 28l8 16M98 28l-8 16" stroke="#0E2A47" stroke-width="9" stroke-linecap="round"/>' +
     '<g class="vg-ojos"><circle cx="42" cy="56" r="16" fill="#fff"/><circle cx="78" cy="56" r="16" fill="#fff"/>' +
     '<circle class="vg-pu" cx="44" cy="57" r="7" fill="#0E2A47"/><circle class="vg-pu" cx="80" cy="57" r="7" fill="#0E2A47"/>' +
     '<circle cx="46" cy="54" r="2.2" fill="#fff"/><circle cx="82" cy="54" r="2.2" fill="#fff"/></g>' +
     '<rect class="vg-par" x="24" y="38" width="72" height="0" fill="#0E2A47"/>' +
-    '<path d="M60 64l-6 9h12z" fill="#F2A33A"/>' +
+    '<path d="M60 64l-6 9h12z" fill="#F2A33A"/></g>' +
     '<circle cx="47" cy="94" r="3" fill="#E4433B"/><circle cx="60" cy="99" r="3" fill="#F2A33A"/><circle cx="73" cy="94" r="3" fill="#1BA0E0"/>' +
     '<circle cx="53" cy="105" r="2.6" fill="#2AA44F"/><circle cx="67" cy="105" r="2.6" fill="#F4C21B"/>' +
     '<path d="M44 120l-4 6M52 121l0 6M68 121l0 6M76 120l4 6" stroke="#F2A33A" stroke-width="3" stroke-linecap="round"/></svg>';
   const st = document.createElement('style');
   st.textContent = '#vigi{position:fixed;z-index:60;left:12px;top:64px;max-width:min(360px,calc(100vw - 24px));background:#fff;color:#1D2733;border-radius:16px;box-shadow:0 12px 34px rgba(14,42,71,.28);padding:14px 16px 12px;display:flex;gap:12px;align-items:flex-start;animation:vgIn .45s cubic-bezier(.2,.9,.3,1.3) both;border:2px solid #E8EEF5}' +
     '#vigi:before{content:"";position:absolute;left:22px;top:-9px;width:16px;height:16px;background:#fff;transform:rotate(45deg);border-left:2px solid #E8EEF5;border-top:2px solid #E8EEF5}' +
-    '#vigi .vg-b{flex:none;animation:vgFlota 3s ease-in-out infinite}#vigi .vg-par{animation:vgParpa 4.2s infinite}#vigi .vg-pu{transition:transform .08s linear}#vigi:not(.sigue) .vg-pu{animation:vgMira 5s ease-in-out infinite}' +
+    '#vigi .vg-b{flex:none;animation:vgFlota 3s ease-in-out infinite}#vigi .vg-par{animation:vgParpa 4.2s infinite}#vigi .vg-cab{transition:transform .25s ease-out}#vigi .vg-b svg{transform-origin:50% 90%;transition:transform .3s ease-out}#vigi:not(.sigue) .vg-cab{animation:vgCab 6s ease-in-out infinite}' +
     '#vigi .vg-n{font-size:12px;font-weight:700;color:#1B7A86;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}#vigi .vg-t{font-size:14.5px;line-height:1.45}' +
     '#vigi .vg-acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#vigi a.vg-l{background:#1B7A86;color:#fff;text-decoration:none;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600}' +
     '#vigi button{background:#EEF2F5;color:#0E2A47;border:0;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer}#vigi .vg-x{position:absolute;right:6px;top:4px;background:none;font-size:18px;color:#5B6470;padding:2px 6px}' +
     '@keyframes vgIn{0%{opacity:0;transform:translateY(-10px) scale(.85)}100%{opacity:1;transform:none}}@keyframes vgFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}' +
-    '@keyframes vgParpa{0%,92%,100%{height:0}95%{height:36px}}@keyframes vgMira{0%,40%,100%{transform:translateX(0)}50%,70%{transform:translateX(3px)}80%{transform:translateX(-3px)}}' +
+    '@keyframes vgParpa{0%,92%,100%{height:0}95%{height:36px}}@keyframes vgCab{0%,40%,100%{transform:none}50%,65%{transform:translateX(7px)}78%,90%{transform:translateX(-7px)}}' +
     '@media (prefers-reduced-motion:reduce){#vigi,#vigi *{animation:none!important}}';
   document.head.appendChild(st);
   function mostrar() {
@@ -6082,15 +6082,18 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const li0 = window.logoInicio;
   window.logoInicio = function () { if (saltarClick) { saltarClick = false; return; } return li0.apply(this, arguments); };
   window.vigiBuho = mostrar;
-  // los ojos de Vigi siguen al mouse (o al dedo)
+  // como un búho de verdad: Vigi no mueve los ojos, gira la cabeza hacia el mouse (o el dedo)
   let quieto = null;
   function mira(x, y) {
     const el = document.getElementById('vigi'); if (!el) return;
-    el.classList.add('sigue'); clearTimeout(quieto); quieto = setTimeout(() => el.classList.remove('sigue'), 4000);
+    el.classList.add('sigue'); clearTimeout(quieto); quieto = setTimeout(() => { el.classList.remove('sigue'); const c = el.querySelector('.vg-cab'), v = el.querySelector('.vg-b svg'); if (c) c.style.transform = ''; if (v) v.style.transform = ''; }, 4000);
     const svg = el.querySelector('.vg-b svg'); if (!svg) return; const r = svg.getBoundingClientRect(), k = r.width / 120;
-    el.querySelectorAll('.vg-pu').forEach(pu => { const cx = r.left + Number(pu.getAttribute('cx')) * k, cy = r.top + Number(pu.getAttribute('cy')) * k;
-      const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1, m = Math.min(6, d / 25);
-      pu.style.transform = 'translate(' + (dx / d * m).toFixed(2) + 'px,' + (dy / d * m).toFixed(2) + 'px)'; });
+    const cab = el.querySelector('.vg-cab'); if (!cab) return;
+    const cx = r.left + 60 * k, cy = r.top + 60 * k, dx = x - cx, dy = y - cy;
+    // la cara se corre hacia donde mira (giro) y todo el búho se inclina un poco
+    const corre = Math.max(-9, Math.min(9, dx / 18)), baja = Math.max(-5, Math.min(5, dy / 30)), incl = Math.max(-12, Math.min(12, dx / 25));
+    cab.style.transform = 'translate(' + corre.toFixed(1) + 'px,' + baja.toFixed(1) + 'px)';
+    svg.style.transform = 'rotate(' + incl.toFixed(1) + 'deg)';
   }
   document.addEventListener('mousemove', e => mira(e.clientX, e.clientY), {passive: true});
   document.addEventListener('touchmove', e => { const t = e.touches[0]; if (t) mira(t.clientX, t.clientY); }, {passive: true});
