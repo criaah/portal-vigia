@@ -1,0 +1,1 @@
+[[474293, 474600, ") add(t.asignado, f, {txt, k: 'ingreso', turno: f});\n      else add(t.asignado, f, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f}); }); // cada revisión queda en su propio día"]]

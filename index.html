@@ -5443,9 +5443,8 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       add(resp, f, {txt: nomP + ' · ' + que, k, venc, id: p.id, fz}); });
     turnos(desde, hasta).forEach(t => { const f = t.fecha, txt = 'Revisar ingresos ' + dm(t.desde) + '–' + dm(t.hasta);
       if (t.estado === 'hecha') add(personaDe(t.revisado_por) || t.revisado_por || t.asignado, f, {txt, k: 'ingreso', hecha: true, turno: f});
-      else if (f >= d0 || t.fecha === d0) add(t.asignado, f, {txt, k: 'ingreso', turno: f});
-      else if (d0 >= desde && d0 <= hasta) add(t.asignado, d0, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f});
-      else add(t.asignado, f, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f}); });
+      else if (f >= d0) add(t.asignado, f, {txt, k: 'ingreso', turno: f});
+      else add(t.asignado, f, {txt: txt + ' (sin registrar)', k: 'ingreso', venc: true, turno: f}); }); // cada revisión queda en su propio día
     return M;
   }
   // la agenda se mueve semana por semana (lunes a domingo)
