@@ -3485,6 +3485,15 @@ function descartarCandidato(idc) {
 const avisosLlamadas = () => DB.CONTACTOS.filter(c => c.salida && c.salida !== 'sin problema nuevo' && c.fecha_real && dif(hoy(), String(c.fecha_real).slice(0, 10)) <= 7)
   .sort((a, b) => a.fecha_real < b.fecha_real ? 1 : -1);
 // ------------------------------------------------------------ ficha simple del paciente
+// v34 · un paciente está en un solo paso: la prealta espera a la revisión de ingreso, la Atención 1 a la prealta y las llamadas a la Atención 1
+function bloqueada(p, t) {
+  if (!SIMPLE() || !t) return false;
+  const nodo = (P(t.n) || {}).id_nodo, pend = n => { const x = tareaN(p.id, n); return x && x.estado === 'pendiente'; };
+  if (nodo === 'T4' || nodo === 'G1') return pend('T1');
+  if (nodo === 'T6') return pend('T1') || pend('T4') || pend('G1');
+  if (nodo === 'T12' || nodo === 'T21' || nodo === 'T22') return pend('T6');
+  return false;
+}
 function pasosSimple(p) {
   const L = [];
   const fila = (nodo, hito, nombre) => { const t = tareaN(p.id, nodo, hito); if (!t) return; L.push({t, nombre, nodo, hito}); };
@@ -3493,7 +3502,7 @@ function pasosSimple(p) {
   return L;
 }
 function vCasoSimple(p) {
-  const jid = js(p.id), L = pasosSimple(p), prox = L.find(x => x.t.estado === 'pendiente');
+  const jid = js(p.id), L = pasosSimple(p), prox = L.find(x => x.t.estado === 'pendiente' && !bloqueada(p, x.t));
   const I0 = IDENT[p.id] || {};
   let h = '<!--cab--><a href="javascript:void 0" onclick="ir(\'pacientes\')">← pacientes</a><h2 style="margin:4px 0 2px">' + esc(I0.nombre || p.id) + ' <span class="chip c-pend">' + esc(p.estado) + '</span></h2>' +
     '<p class="note" style="margin-top:0">' + [I0.rut ? '<b>' + esc(I0.rut) + '</b>' : '', ubicaTxt(p, true), 'ingreso ' + dm(p.fecha_ingreso), p.fecha_alta ? 'alta ' + dm(p.fecha_alta) : '', esc(p.id)].filter(Boolean).join(' · ') + '</p><!--/cab-->';
@@ -3614,7 +3623,7 @@ function pendientes(todas) {
   const L = [], lim = sumar(hoy(), 1);
   DB.TAREAS.forEach(t => {
     const p = pac(t.id_paciente);
-    if (!p || t.estado !== 'pendiente' || !enCurso(p) || (SIMPLE() && !enSimple(t.n))) return;
+    if (!p || t.estado !== 'pendiente' || !enCurso(p) || (SIMPLE() && !enSimple(t.n)) || bloqueada(p, t)) return;
     if (!todas && t.fecha_debida && t.fecha_debida > lim) return;
     const f = P(t.n);
     const card = '<div class="tcard" style="border-left-color:var(--' + f.carril + ')" onclick="abrirTarea(' + js(p.id) + ',' + js(t.n) + ',' + js(t.hito) + ')"><div class="tx"><div class="t1">' + quienTxt(p) + (t.hito ? ' · ' + esc(hitoTxt(t.hito)) : '') + '</div><div class="t2">' + numero(f) + ' ' + esc(tareaCorta(f)) + '</div><div class="t3">' + esc(RESP(f)) + '</div></div><div class="fin">' + chip(estadoTarea(t)) + '</div></div>';
@@ -4854,59 +4863,62 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const fx = s => (s ? dm(String(s).slice(0, 10)) : '');
   const datosC = c => typeof c.datos === 'string' ? (() => { try { return JSON.parse(c.datos || '{}'); } catch (e) { return {}; } })() : (c.datos || {});
   const PROB = [['r_medicamentos', 'problema con medicamentos'], ['r_controles', 'controles sin agendar'], ['r_nofarm', 'no sigue indicaciones no farmacológicas'], ['r_sintomas', 'síntomas de descompensación']];
-  // v31 · síntesis breve, al estilo de las notas clínicas: una línea por dominio, sin repetir lo que no aporta
+  // v34 · síntesis narrativa y breve (formato EN SUMA de las notas UCI), pensada para quien hace la llamada: siempre teléfonos, dirección y tutor
   const SIN_ALTA = {};
-  const abrevNom = n => { const w = String(n || '').replace(/\s*\(.*?\)/g, '').trim().split(/\s+/); return w.length >= 3 ? w[0] + ' ' + w[w.length - 2] + ' ' + w[w.length - 1].charAt(0) + '.' : w.join(' '); };
-  const tbL = r => !TBD.some(([k]) => r[k]) ? '' : TBD.map(([k, l]) => (l === 'no farmacológico' ? 'nf' : l === 'medicamentos' ? 'fx' : 'ctl') + ' ' + (r[k] ? String(r[k]).split(' ')[0] : '—')).join(' · ');
+  const nomCorto = n => String(n || '').replace(/\s*\(.*?\)/g, '').trim();
+  const paren = s => String(s || '').replace(/\s*\((.*?)\)/, ', $1');
   function sintesis(p) {
     const I = IDENT[p.id] || {}, L = [], R = SIN_ALTA[p.id];
     if (R === undefined && typeof srv === 'function') {
       SIN_ALTA[p.id] = null;
       srv('api_alta', 'ver', p.id, null, typeof claveRutVigia === 'function' ? claveRutVigia() : '').then(r => { SIN_ALTA[p.id] = r || {}; const el = $('#sintxt'); if (el) el.textContent = sintesis(p); }, () => { SIN_ALTA[p.id] = {}; });
     }
-    const A = R || {};
+    const A = R || {}, c = CONTACTO[p.id] || {};
     const f = Object.assign({}, datos(tareaN(p.id, 'T1')), datos(tareaN(p.id, 'T4')));
     const alta = p.fecha_alta || f.fecha_alta || '', dpa = alta && alta <= hoy() ? dif(hoy(), alta) : null;
-    L.push(p.id + (I.nombre ? ' · ' + abrevNom(I.nombre) : '') + (A.edad ? ' · ' + A.edad + ' a' : '') + (dpa !== null ? ' · día ' + dpa + ' post-alta' : ''));
-    L.push('UGA ' + (fx(p.fecha_ingreso) || '—') + ' → ' + (fx(alta) || '—') + (f.destino && f.destino !== 'domicilio' ? ' · ' + f.destino : '') + ' · ' + (p.estado || '—'));
+    const est = p.fecha_ingreso && alta ? dif(alta, p.fecha_ingreso) : null;
     const dx = String(A.dx || '').split('\n').map(x => x.trim()).filter(Boolean);
-    if (dx.length) L.push('Dg: ' + dx.join(' · '));
-    if (A.alergias) L.push('Alergias: ' + A.alergias);
-    const b = [];
-    if (f.barthel_basal !== undefined && f.barthel_basal !== '') b.push('Barthel ' + f.barthel_basal + (f.barthel_actual !== undefined && f.barthel_actual !== '' ? '→' + f.barthel_actual : ''));
-    if (f.cfs) b.push('CFS ' + f.cfs); if (f.glim) b.push('GLIM ' + f.glim); if (f.farmacos) b.push(f.farmacos + ' fx'); if (A.cognicion) b.push(A.cognicion);
-    if (b.length) L.push('Funcional: ' + b.join(' · '));
-    const c = CONTACTO[p.id] || {};
-    const ct = [(c.nombre || A.contacto_nombre || '') + ((c.parentesco || A.contacto_parentesco) ? ' (' + String(c.parentesco || A.contacto_parentesco).replace(/\s*\((.*?)\)/, ', $1') + ')' : ''), c.tel || A.contacto_tel || ''].filter(x => x.trim()).join(' ');
-    if (ct) L.push('Contacto: ' + ct + ((c.comunicacion || A.comunicacion) ? ' · ' + (c.comunicacion || A.comunicacion) : ''));
-    const t6 = tareaN(p.id, 'T6');
-    if (t6 && t6.estado === 'hecha') { const a = datos(t6); L.push('A1 ' + fx(t6.fecha_hecha) + ': ' + ([tbL(a) ? 'TB ' + tbL(a) : '', a.educaciones && a.educaciones !== 'sí' ? 'educ. ' + a.educaciones : '', (c.folleto || A.folleto) ? 'folleto ✓' : ''].filter(Boolean).join(' · ') || 'hecha')); }
+    // EN SUMA: quién es, por qué estuvo, cómo salió y en qué va
+    let s = 'EN SUMA: ' + (nomCorto(I.nombre) || p.id) + (A.edad ? ', ' + A.edad + ' años' : '');
+    s += alta && alta <= hoy() ? ', egresó de la UGA el ' + dm(alta) + (est !== null ? ' (' + est + ' días)' : '') : alta ? ', con alta prevista el ' + dm(alta) : ', hospitalizado en UGA desde el ' + dm(p.fecha_ingreso);
+    s += dx.length ? ' por ' + dx.join(' | ') + '.' : '.';
+    const fun = [];
+    if (f.barthel_basal !== undefined && f.barthel_basal !== '') fun.push('Barthel ' + f.barthel_basal + (f.barthel_actual !== undefined && f.barthel_actual !== '' && f.barthel_actual !== f.barthel_basal ? ' -> ' + f.barthel_actual : ''));
+    if (A.cognicion) fun.push(A.cognicion); if (f.cfs) fun.push('CFS ' + f.cfs);
+    if (fun.length) s += ' ' + fun.join(', ') + '.';
+    if (A.alergias && !/sin alerg|no refiere|niega/i.test(A.alergias)) s += ' Alérgico a ' + A.alergias + '.';
+    const t6 = tareaN(p.id, 'T6'), a1 = t6 && t6.estado === 'hecha' ? datos(t6) : null;
+    if (dpa !== null) s += ' Hoy cursa día ' + dpa + ' post-alta.';
+    if (a1) {
+      const r = [['tb_medicamentos', 'fármacos'], ['tb_controles', 'controles'], ['tb_alimentacion', 'cuidados en casa']].filter(([k]) => /^[RP]/.test(a1[k] || ''));
+      s += ' En la Atención 1' + (a1.educaciones && a1.educaciones !== 'sí' ? ' la educación del alta quedó ' + a1.educaciones + (r.length ? ' y' : '') : '') +
+        (r.length ? ' el teach-back de ' + r.map(x => x[1]).join(' y ') + ' requirió refuerzo' : !(a1.educaciones && a1.educaciones !== 'sí') && (a1.tb_medicamentos || a1.tb_controles) ? ' el teach-back fue logrado' : ' se presentó el seguimiento') + '.';
+    }
     const cs = DB.CONTACTOS.filter(x => x.id_paciente === p.id).sort((x, y) => String(x.fecha_real || x.registrado) < String(y.fecha_real || y.registrado) ? -1 : 1);
-    cs.forEach(x => {
-      const d = datosC(x), h = hitoTxt(x.hito), fe = fx(x.fecha_real || x.registrado);
-      if (x.resultado !== 'logrado') { L.push(h + ' ' + fe + ': sin contacto'); return; }
-      const pr = PROB.filter(([k]) => d[k] === 'Sí').map(q => q[1]);
-      L.push(h + ' ' + fe + ': ' + [pr.length ? pr.join(', ') : 'sin problemas', x.salida && x.salida !== 'sin problema nuevo' ? '→ ' + x.salida : ''].filter(Boolean).join(' '));
-      if (d.tb_correccion) L.push('  ' + d.tb_correccion);
-    });
-    const u = tbUltimo(p);
-    if (cs.some(x => x.resultado === 'logrado') && TBD.some(([k]) => u[k])) L.push('TB actual: ' + tbL(u));
-    const evs = DB.EVENTOS.filter(e => e.id_paciente === p.id).sort((x, y) => String(x.fecha) < String(y.fecha) ? -1 : 1);
-    const av = avisos().filter(a => a.id_paciente === p.id);
-    if (evs.length || av.length) {
-      evs.forEach(e => L.push('⚠ ' + e.tipo + ' ' + fx(e.fecha) + [e.clasificacion, e.nota].filter(Boolean).map(z => ' · ' + z).join('')));
-      av.forEach(a => L.push('⚠ aviso QR ' + fx(a.fecha) + ': ' + a.donde + (a.motivo ? ' · ' + a.motivo : '')));
-    } else if (dpa !== null) L.push('Eventos: sin urgencia ni rehospitalización');
+    const ok = cs.filter(x => x.resultado === 'logrado');
+    if (ok.length) {
+      const u = ok[ok.length - 1], d = datosC(u), pr = PROB.filter(([k]) => d[k] === 'Sí').map(q => q[1]);
+      s += ' ' + ok.length + (ok.length === 1 ? ' llamada lograda' : ' llamadas logradas') + '; en la última (' + hitoTxt(u.hito) + ', ' + fx(u.fecha_real || u.registrado) + ') ' + (pr.length ? pr.join(', ') : 'sin problemas') + (u.salida && u.salida !== 'sin problema nuevo' ? ', conducta: ' + u.salida : '') + '.';
+    }
+    const fall = cs.length - ok.length; if (fall) s += ' ' + fall + ' intento' + (fall > 1 ? 's' : '') + ' sin contacto.';
+    const evs = DB.EVENTOS.filter(e => e.id_paciente === p.id), av = avisos().filter(a => a.id_paciente === p.id);
+    if (evs.length || av.length) s += ' Eventos: ' + evs.map(e => e.tipo + ' ' + fx(e.fecha)).concat(av.map(a => 'aviso QR ' + fx(a.fecha) + ' (' + a.donde + ')')).join(', ') + '.';
+    else if (dpa !== null) s += ' Sin urgencias ni rehospitalizaciones.';
+    L.push(s, '');
+    // datos para llamar: siempre
+    const tels = [c.tel || A.contacto_tel, A.contacto_tel2].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+    const quien = [c.nombre || A.contacto_nombre, paren(c.parentesco || A.contacto_parentesco)].filter(Boolean).join(', ');
+    L.push('Teléfonos: ' + (tels.length ? (quien ? quien + ' ' : '') + tels.join(' / ') : 'sin registrar (completar en Resumen de alta)') + ((c.comunicacion || A.comunicacion) ? '. ' + (c.comunicacion || A.comunicacion) : ''));
+    L.push('Tutor: ' + (A.tutor || (quien ? quien + ' (cuidador principal)' : 'sin registrar')));
+    L.push('Dirección: ' + (A.direccion || [A.comuna, A.vive_con ? 'vive con ' + A.vive_con : ''].filter(Boolean).join(', ') || 'sin registrar (completar en Resumen de alta)') + (A.cesfam ? ' · ' + A.cesfam : ''));
     const ojo = String(A.ojo || '').split('\n').map(x => x.trim()).filter(Boolean);
-    if (ojo.length) L.push('Ojo: ' + ojo.map(x => x.replace(/\s*\([^)]*\)/g, '')).join(' · '));
-    const pend = pasosSimple(p).filter(x => x.t.estado === 'pendiente').slice(0, 2);
-    if (pend.length) L.push('Próximo: ' + pend.map(x => x.nombre.replace(/^Llamada /, '') + (x.t.fecha_debida ? ' ' + (x.t.fecha_debida === hoy() ? 'hoy' : fx(x.t.fecha_debida)) : '')).join(' · '));
-    const al = alertasPac(p).filter(x => !/^teach-back pendiente/.test(x) || !cs.length);
-    if (al.length) L.push('Alertas: ' + al.join(' · '));
+    if (ojo.length) L.push('Ojo: ' + ojo.map(x => x.replace(/^\p{Extended_Pictographic}️?\s*/u, '').replace(/\s*\([^)]*\)/g, '')).join(' | '));
+    const pend = pasosSimple(p).filter(x => x.t.estado === 'pendiente' && !bloqueada(p, x.t)).slice(0, 2);
+    if (pend.length) L.push('Próximo: ' + pend.map(x => x.nombre.replace(/^Llamada /, 'llamada ') + (x.t.fecha_debida ? ' ' + (x.t.fecha_debida === hoy() ? 'hoy' : fx(x.t.fecha_debida)) : '')).join('; '));
     return L.join('\n');
   }
   function cajaSintesis(p, abierta) {
-    return '<details class="card sintesis"' + (abierta ? ' open' : '') + '><summary><b>Síntesis del caso</b> <span class="note">· breve, para pegar en la ficha o el grupo</span></summary>' +
+    return '<details class="card sintesis"' + (abierta ? ' open' : '') + '><summary><b>Síntesis del caso</b> <span class="note">· para quien llama, y para pegar en la ficha</span></summary>' +
       '<pre id="sintxt" style="white-space:pre-wrap;font:13px/1.45 system-ui,sans-serif;margin:10px 0">' + esc(sintesis(p)) + '</pre>' +
       '<button class="btn sm sec" onclick="copiarSintesis()">Copiar síntesis</button></details>';
   }
@@ -5073,7 +5085,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     ['Paciente', [TXT('edad', 'Edad (años)', '77'), TXT('unidad', 'Unidad', 'UGA 1'), TXT('vive_con', 'Vive con', 'hija'), TXT('comuna', 'Comuna donde vivirá', 'Peñalolén'), TXT('cesfam', 'CESFAM', 'CESFAM Gerardo Whelan')]],
     ['Clínica', [AREA('dx', 'Diagnósticos de egreso (uno por línea)', 'IC FEVI reducida (33%), probable isquémica\nFA debut + trombo apical VI\nDM2 insulinorrequiriente', 4),
       TXT('alergias', 'Alergias', 'PENICILINAS o «sin alergias conocidas»'), TXT('cognicion', 'Cognición', 'Pfeiffer 4 · CAM (−)')]],
-    ['Contacto', [TXT('contacto_nombre', 'Nombre del contacto', 'Carmen'), TXT('contacto_parentesco', 'Parentesco o rol', 'hija (cuidadora)'), TXT('contacto_tel', 'Teléfono', '9 3704 0997'),
+    ['Contacto', [TXT('contacto_nombre', 'Nombre del contacto', 'Carmen'), TXT('contacto_parentesco', 'Parentesco o rol', 'hija (cuidadora)'), TXT('contacto_tel', 'Teléfono', '9 3704 0997'), TXT('contacto_tel2', 'Otro teléfono (paciente u otro familiar)', '2 2xxx xxxx'), TXT('tutor', 'Tutor o responsable', 'Carmen, hija'), TXT('direccion', 'Dirección donde vivirá', 'Calle 123, Peñalolén'),
       TXT('comunicacion', 'Para comunicarse', 'Hipoacusia bilateral sin audífono → llamar a la hija')]],
     ['Controles y cuidados', [AREA('controles', 'Controles (uno por línea: «cuándo: qué»)', 'Antes del 27/10: CESFAM (+ oftalmo y dental)\nLe avisarán la fecha: Cardiología CRS Cordillera', 4),
       TXT('suspendidos', 'Remedios que deja de tomar', 'Amlodipino'),
@@ -5472,7 +5484,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       const nomP = corto((IDENT[p.id] || {}).nombre) || p.id, que = (NOMBRE_SIMPLE[f0.id_nodo] || tareaCorta(f0)) + (t.hito ? ' ' + hitoTxt(t.hito) : '');
       const resp = fz === 'revision' ? p.creado_por : fz === 'hospital' ? p.titular : p.gestor, k = ETAPA_NODO[f0.id_nodo] || 'otros';
       if (t.estado === 'hecha' && t.fecha_hecha) { const f = String(t.fecha_hecha).slice(0, 10); if (f >= desde && f <= hasta) add(personaDe(t.hecho_por) || resp, f, {txt: nomP + ' · ' + que, k, hecha: true, id: p.id, fz}); return; }
-      if (t.estado !== 'pendiente' || !enCurso(p) || !t.fecha_debida) return;
+      if (t.estado !== 'pendiente' || !enCurso(p) || !t.fecha_debida || bloqueada(p, t)) return;
       const venc = t.fecha_debida < d0, f = venc ? d0 : t.fecha_debida; if (f > hasta || f < desde) return;
       add(resp, f, {txt: nomP + ' · ' + que, k, venc, id: p.id, fz, act: p.actualizado || '', clave: t.clave}); });
     turnos(desde, hasta).filter(t => t.estado !== 'eliminada').forEach(t => { const f = t.fecha, txt = 'Revisar ingresos ' + dm(t.desde) + '–' + dm(t.hasta);
@@ -6341,8 +6353,11 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     cargar(p.id);
     const A = GA[p.id], c = CONTACTO[p.id] || {}, M = MARCA[p.id + '|' + hito] = MARCA[p.id + '|' + hito] || {};
     const tel = c.tel || (A && A.contacto_tel) || '', nom = [c.nombre || (A && A.contacto_nombre), c.parentesco || (A && A.contacto_parentesco)].filter(Boolean).join(', ');
-    let h = '<div class="card gl"><div class="gl-tel">' + (tel ? '<a class="btn" href="tel:' + esc(telHref(tel)) + '">📞 ' + esc(tel) + '</a><div><b>' + esc(nom || 'Contacto') + '</b>' + ((c.comunicacion || (A && A.comunicacion)) ? '<div class="note">' + esc(c.comunicacion || A.comunicacion) + '</div>' : '') + '</div>'
-      : '<div class="note">Sin teléfono registrado: complételo en el Resumen de alta.</div>') + '</div>';
+    const tels = [tel, A && A.contacto_tel2].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+    let h = '<div class="card gl"><div class="gl-tel">' + (tels.length ? tels.map(t => '<a class="btn" href="tel:' + esc(telHref(t)) + '">📞 ' + esc(t) + '</a>').join('') + '<div><b>' + esc(nom || 'Contacto') + '</b>' + ((c.comunicacion || (A && A.comunicacion)) ? '<div class="note">' + esc(c.comunicacion || A.comunicacion) + '</div>' : '') + '</div>'
+      : '<div class="note">Sin teléfono registrado: complételo en el Resumen de alta.</div>') + '</div>' +
+      (A ? '<div class="gl-dat"><div><span class="note">Tutor</span> ' + esc(A.tutor || (nom ? nom + ' (cuidador principal)' : 'sin registrar')) + '</div><div><span class="note">Dirección</span> ' +
+        esc(A.direccion || [A.comuna, A.vive_con ? 'vive con ' + A.vive_con : ''].filter(Boolean).join(', ') || 'sin registrar') + (A.cesfam ? ' · ' + esc(A.cesfam) : '') + '</div></div>' : '');
     if (A === null) return h + '<p class="note">Cargando la pauta del paciente…</p></div>';
     h += '<details class="gl-p" open><summary><b>Pauta de la llamada</b> <span class="note">· marque lo que revisó: queda en el texto para la ficha</span></summary>' +
       secciones(p, hito).map(s => '<div class="gl-s"><label class="gl-h"><input type="checkbox" ' + (M[s.k] ? 'checked ' : '') + 'onchange="guiaMarca(' + js(p.id) + ',' + js(hito) + ',' + js(s.k) + ',this.checked)"> ' + esc(s.t) + '</label><ul>' + s.items.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>').join('') + '</details></div>';
@@ -6374,7 +6389,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   };
   const st = document.createElement('style');
   st.textContent = '.gl{border-left:6px solid var(--teal,#1B7A86)}.gl-tel{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.gl-tel .btn{font-size:18px;padding:10px 16px;text-decoration:none}' +
-    '.gl-p{margin-top:10px}.gl-p>summary{cursor:pointer}.gl-s{margin:10px 0 0}.gl-h{display:flex;gap:8px;align-items:center;font-weight:700;color:var(--navy,#0E2A47);cursor:pointer}.gl-h input{width:18px;height:18px;margin:0}' +
+    '.gl-dat{margin-top:8px;font-size:14px;display:grid;gap:2px}.gl-dat .note{display:inline-block;min-width:70px}.gl-p{margin-top:10px}.gl-p>summary{cursor:pointer}.gl-s{margin:10px 0 0}.gl-h{display:flex;gap:8px;align-items:center;font-weight:700;color:var(--navy,#0E2A47);cursor:pointer}.gl-h input{width:18px;height:18px;margin:0}' +
     '.gl-s ul{margin:4px 0 0 26px;padding:0}.gl-s li{margin:2px 0;font-size:14px;line-height:1.4}';
   document.head.appendChild(st);
 })();
