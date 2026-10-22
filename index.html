@@ -4823,60 +4823,60 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const fx = s => (s ? dm(String(s).slice(0, 10)) : '');
   const datosC = c => typeof c.datos === 'string' ? (() => { try { return JSON.parse(c.datos || '{}'); } catch (e) { return {}; } })() : (c.datos || {});
   const PROB = [['r_medicamentos', 'problema con medicamentos'], ['r_controles', 'controles sin agendar'], ['r_nofarm', 'no sigue indicaciones no farmacológicas'], ['r_sintomas', 'síntomas de descompensación']];
+  // v31 · síntesis breve, al estilo de las notas clínicas: una línea por dominio, sin repetir lo que no aporta
+  const SIN_ALTA = {};
+  const abrevNom = n => { const w = String(n || '').replace(/\s*\(.*?\)/g, '').trim().split(/\s+/); return w.length >= 3 ? w[0] + ' ' + w[w.length - 2] + ' ' + w[w.length - 1].charAt(0) + '.' : w.join(' '); };
+  const tbL = r => !TBD.some(([k]) => r[k]) ? '' : TBD.map(([k, l]) => (l === 'no farmacológico' ? 'nf' : l === 'medicamentos' ? 'fx' : 'ctl') + ' ' + (r[k] ? String(r[k]).split(' ')[0] : '—')).join(' · ');
   function sintesis(p) {
-    const I = IDENT[p.id] || {}, L = [];
-    const f = Object.assign({}, datos(tareaN(p.id, 'T1')), datos(tareaN(p.id, 'T4')), datos(tareaN(p.id, 'G1')));
-    L.push('SÍNTESIS DEL CASO VIGÍA · ' + p.id + (I.nombre ? ' · ' + I.nombre : '') + ' · al ' + dm(hoy()));
-    L.push('Estado: ' + (p.estado || '—') + ' · siguiente paso: ' + etapa(p));
-    L.push('Hospitalización índice UGA: ingreso ' + (fx(p.fecha_ingreso) || '—') + (p.fecha_alta || f.fecha_alta ? ' · alta ' + fx(p.fecha_alta || f.fecha_alta) : '') + (f.destino ? ' · destino ' + f.destino : ''));
+    const I = IDENT[p.id] || {}, L = [], R = SIN_ALTA[p.id];
+    if (R === undefined && typeof srv === 'function') {
+      SIN_ALTA[p.id] = null;
+      srv('api_alta', 'ver', p.id, null, typeof claveRutVigia === 'function' ? claveRutVigia() : '').then(r => { SIN_ALTA[p.id] = r || {}; const el = $('#sintxt'); if (el) el.textContent = sintesis(p); }, () => { SIN_ALTA[p.id] = {}; });
+    }
+    const A = R || {};
+    const f = Object.assign({}, datos(tareaN(p.id, 'T1')), datos(tareaN(p.id, 'T4')));
+    const alta = p.fecha_alta || f.fecha_alta || '', dpa = alta && alta <= hoy() ? dif(hoy(), alta) : null;
+    L.push(p.id + (I.nombre ? ' · ' + abrevNom(I.nombre) : '') + (A.edad ? ' · ' + A.edad + ' a' : '') + (dpa !== null ? ' · día ' + dpa + ' post-alta' : ''));
+    L.push('UGA ' + (fx(p.fecha_ingreso) || '—') + ' → ' + (fx(alta) || '—') + (f.destino && f.destino !== 'domicilio' ? ' · ' + f.destino : '') + ' · ' + (p.estado || '—'));
+    const dx = String(A.dx || '').split('\n').map(x => x.trim()).filter(Boolean);
+    if (dx.length) L.push('Dg: ' + dx.join(' · '));
+    if (A.alergias) L.push('Alergias: ' + A.alergias);
     const b = [];
-    if (f.barthel_basal !== undefined && f.barthel_basal !== '') b.push('Barthel basal ' + f.barthel_basal);
-    if (f.barthel_actual !== undefined && f.barthel_actual !== '') b.push('Barthel actual ' + f.barthel_actual + (f.barthel_fuente ? ' (' + f.barthel_fuente + ')' : ''));
-    if (f.glim) b.push('GLIM ' + f.glim); if (f.cfs) b.push('CFS ' + f.cfs); if (f.farmacos) b.push(f.farmacos + ' fármacos'); if (f.cuidador) b.push('cuidador ' + f.cuidador);
-    if (b.length) L.push('Ficha de entrada: ' + b.join(' · '));
-    try { const r = reglaEntrada(f); if (r && r.motivo) L.push('Regla de entrada v11: ' + r.entra + ' · ' + r.motivo); } catch (e) {}
-    if (f.activacion) L.push('Decisión en la prealta: ' + (f.activacion === 'sí' ? 'entra al seguimiento' : 'no entra') + (f.motivo ? ' · ' + f.motivo : ''));
+    if (f.barthel_basal !== undefined && f.barthel_basal !== '') b.push('Barthel ' + f.barthel_basal + (f.barthel_actual !== undefined && f.barthel_actual !== '' ? '→' + f.barthel_actual : ''));
+    if (f.cfs) b.push('CFS ' + f.cfs); if (f.glim) b.push('GLIM ' + f.glim); if (f.farmacos) b.push(f.farmacos + ' fx'); if (A.cognicion) b.push(A.cognicion);
+    if (b.length) L.push('Funcional: ' + b.join(' · '));
+    const c = CONTACTO[p.id] || {};
+    const ct = [(c.nombre || A.contacto_nombre || '') + ((c.parentesco || A.contacto_parentesco) ? ' (' + (c.parentesco || A.contacto_parentesco) + ')' : ''), c.tel || A.contacto_tel || ''].filter(x => x.trim()).join(' ');
+    if (ct) L.push('Contacto: ' + ct + ((c.comunicacion || A.comunicacion) ? ' · ' + (c.comunicacion || A.comunicacion) : ''));
     const t6 = tareaN(p.id, 'T6');
-    if (t6 && t6.estado === 'hecha') {
-      const a = datos(t6);
-      L.push('', 'ATENCIÓN 1 (' + fx(t6.fecha_hecha) + '): ' + ([a.modalidad, a.interlocutor ? 'con ' + a.interlocutor + (a.interlocutor_nombre ? ' (' + a.interlocutor_nombre + ')' : '') : '', a.educaciones ? 'educaciones ' + a.educaciones : '', a.documento_entregado ? 'documento entregado: ' + a.documento_entregado : ''].filter(Boolean).join(' · ') || 'registrada'));
-      if (a.teachback || tbCorto(a)) L.push('  Teach-back: ' + (a.teachback || '—') + (tbCorto(a) ? ' · ' + tbCorto(a) : '') + (a.tb_brecha ? ' · pendiente: ' + a.tb_brecha : ''));
-      if (a.llamadas_agendadas) L.push('  4 llamadas agendadas en la ficha con el código VG: ' + a.llamadas_agendadas);
-    }
-    const cs = DB.CONTACTOS.filter(c => c.id_paciente === p.id).sort((x, y) => String(x.fecha_real || x.registrado) < String(y.fecha_real || y.registrado) ? -1 : 1);
-    if (cs.length) {
-      L.push('', 'LLAMADAS · logradas ' + cs.filter(c => c.resultado === 'logrado').length + ' de ' + cs.length + ' intento' + (cs.length > 1 ? 's' : ''));
-      cs.forEach(c => {
-        const x = datosC(c);
-        if (c.resultado !== 'logrado') { L.push('- ' + fx(c.fecha_real || c.registrado) + ' · ' + hitoTxt(c.hito) + ': sin contacto'); return; }
-        const pr = PROB.filter(([k]) => x[k] === 'Sí').map(q => q[1]);
-        L.push('- ' + fx(c.fecha_real || c.registrado) + ' · ' + hitoTxt(c.hito) + ': ' + [c.interlocutor ? 'con ' + c.interlocutor + (x.interlocutor_nombre ? ' (' + x.interlocutor_nombre + ')' : '') : '', tbCorto(c) ? 'teach-back ' + tbCorto(c) : '', pr.length ? 'problemas: ' + pr.join(', ') : 'sin problemas en la revisión', c.salida ? 'conducta: ' + c.salida : ''].filter(Boolean).join(' · '));
-        if (x.tb_correccion) L.push('  Corrección: ' + x.tb_correccion);
-        if (x.urgencia && x.urgencia.startsWith('sí')) L.push('  Urgencia' + (x.fecha_urgencia ? ' ' + fx(x.fecha_urgencia) : '') + ': ' + [x.urg_lugar, x.urg_detalle].filter(Boolean).join(' · '));
-        if (x.rehosp && x.rehosp.startsWith('sí')) L.push('  Rehospitalización' + (x.fecha_rehosp ? ' ' + fx(x.fecha_rehosp) : '') + ': ' + [x.rehosp_lugar, x.rehosp_detalle, x.rehosp_estado, x.fecha_alta_rehosp ? 'alta ' + fx(x.fecha_alta_rehosp) : ''].filter(Boolean).join(' · '));
-        if (x.hallazgos) L.push('  Observaciones: ' + x.hallazgos);
-        const coms = Object.keys(x).filter(k => /^com_/.test(k) && x[k]).sort().map(k => x[k]);
-        if (coms.length) L.push('  Comentarios: ' + coms.join(' · '));
-      });
-    }
+    if (t6 && t6.estado === 'hecha') { const a = datos(t6); L.push('A1 ' + fx(t6.fecha_hecha) + ': ' + ([tbL(a) ? 'TB ' + tbL(a) : '', a.educaciones && a.educaciones !== 'sí' ? 'educ. ' + a.educaciones : '', (c.folleto || A.folleto) ? 'folleto ✓' : ''].filter(Boolean).join(' · ') || 'hecha')); }
+    const cs = DB.CONTACTOS.filter(x => x.id_paciente === p.id).sort((x, y) => String(x.fecha_real || x.registrado) < String(y.fecha_real || y.registrado) ? -1 : 1);
+    cs.forEach(x => {
+      const d = datosC(x), h = hitoTxt(x.hito), fe = fx(x.fecha_real || x.registrado);
+      if (x.resultado !== 'logrado') { L.push(h + ' ' + fe + ': sin contacto'); return; }
+      const pr = PROB.filter(([k]) => d[k] === 'Sí').map(q => q[1]);
+      L.push(h + ' ' + fe + ': ' + [pr.length ? pr.join(', ') : 'sin problemas', x.salida && x.salida !== 'sin problema nuevo' ? '→ ' + x.salida : ''].filter(Boolean).join(' '));
+      if (d.tb_correccion) L.push('  ' + d.tb_correccion);
+    });
     const u = tbUltimo(p);
-    if (TBD.some(([k]) => u[k])) L.push('', 'TEACH-BACK ACTUAL (último por dominio): ' + TBD.map(([k, l]) => l + ' ' + (u[k] ? String(u[k]).split(' ')[0] : '—')).join(' · '));
+    if (cs.some(x => x.resultado === 'logrado') && TBD.some(([k]) => u[k])) L.push('TB actual: ' + tbL(u));
     const evs = DB.EVENTOS.filter(e => e.id_paciente === p.id).sort((x, y) => String(x.fecha) < String(y.fecha) ? -1 : 1);
     const av = avisos().filter(a => a.id_paciente === p.id);
     if (evs.length || av.length) {
-      L.push('', 'EVENTOS DESDE EL ALTA');
-      evs.forEach(e => L.push('- ' + fx(e.fecha) + ' · ' + e.tipo + [e.clasificacion, e.planificado ? 'planificado: ' + e.planificado : '', e.nota].filter(Boolean).map(z => ' · ' + z).join('')));
-      av.forEach(a => L.push('- ' + fx(a.fecha) + ' · aviso del QR: ' + a.donde + ' · hospitalizado: ' + a.hospitalizado + (a.motivo ? ' · ' + a.motivo : '') + ' (' + a.estado + ')'));
-    } else L.push('', 'EVENTOS DESDE EL ALTA: sin urgencias ni rehospitalizaciones registradas');
-    const pend = pasosSimple(p).filter(x => x.t.estado === 'pendiente').slice(0, 4);
-    if (pend.length) L.push('', 'PRÓXIMO: ' + pend.map(x => x.nombre + (x.t.fecha_debida ? ' (' + fx(x.t.fecha_debida) + ')' : '')).join(' · '));
-    const al = alertasPac(p);
-    if (al.length) L.push('ALERTAS: ' + al.join(' · '));
+      evs.forEach(e => L.push('⚠ ' + e.tipo + ' ' + fx(e.fecha) + [e.clasificacion, e.nota].filter(Boolean).map(z => ' · ' + z).join('')));
+      av.forEach(a => L.push('⚠ aviso QR ' + fx(a.fecha) + ': ' + a.donde + (a.motivo ? ' · ' + a.motivo : '')));
+    } else if (dpa !== null) L.push('Eventos: sin urgencia ni rehospitalización');
+    const ojo = String(A.ojo || '').split('\n').map(x => x.trim()).filter(Boolean);
+    if (ojo.length) L.push('Ojo: ' + ojo.map(x => x.replace(/\s*\([^)]*\)/g, '')).join(' · '));
+    const pend = pasosSimple(p).filter(x => x.t.estado === 'pendiente').slice(0, 2);
+    if (pend.length) L.push('Próximo: ' + pend.map(x => x.nombre.replace(/^Llamada /, '') + (x.t.fecha_debida ? ' ' + (x.t.fecha_debida === hoy() ? 'hoy' : fx(x.t.fecha_debida)) : '')).join(' · '));
+    const al = alertasPac(p).filter(x => !/^teach-back pendiente/.test(x) || !cs.length);
+    if (al.length) L.push('Alertas: ' + al.join(' · '));
     return L.join('\n');
   }
   function cajaSintesis(p, abierta) {
-    return '<details class="card sintesis"' + (abierta ? ' open' : '') + '><summary><b>Síntesis del caso</b> <span class="note">· se arma con todo lo registrado</span></summary>' +
-      '<pre id="sintxt" style="white-space:pre-wrap;font-size:13px;margin:10px 0">' + esc(sintesis(p)) + '</pre>' +
+    return '<details class="card sintesis"' + (abierta ? ' open' : '') + '><summary><b>Síntesis del caso</b> <span class="note">· breve, para pegar en la ficha o el grupo</span></summary>' +
+      '<pre id="sintxt" style="white-space:pre-wrap;font:13px/1.45 system-ui,sans-serif;margin:10px 0">' + esc(sintesis(p)) + '</pre>' +
       '<button class="btn sm sec" onclick="copiarSintesis()">Copiar síntesis</button></details>';
   }
   window.copiarSintesis = () => {
