@@ -5342,9 +5342,10 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   // ---------------------------------------------------- a cargo según la fase
   window.aCargoTxt = (p, tabla) => {
     const f = faseDe(p), act = f === 'gestion' ? p.gestor : p.titular, et = f === 'gestion' ? 'llamadas' : 'hasta el alta';
-    if (tabla) return '<div><span class="note">Revisó</span> ' + (p.creado_por ? avatarDe(p.creado_por) + ' ' + esc(nomC(p.creado_por)) : '—') + '</div>' +
-      '<div' + (f === 'hospital' ? ' class="fase-act"' : '') + '><span class="note">Hospital</span> ' + quien(p.titular) + '</div>' +
-      '<div' + (f === 'gestion' ? ' class="fase-act"' : '') + '><span class="note">Llamadas</span> ' + quien(p.gestor) + '</div>';
+    if (tabla) { // solo los íconos; al pasar el mouse, quién es y qué hace
+      const ic = (lab, n, act) => n ? '<span class="ac-i' + (act ? ' act' : '') + '" title="' + esc(lab + ': ' + nomC(n)) + '">' + avatarDe(n).replace(/ title="[^"]*"/, '') + '</span>'
+        : '<span class="ac-i vacio" title="' + esc(lab + ': sin asignar') + '">·</span>';
+      return '<div class="ac-row">' + ic('Revisó la ficha', p.creado_por, false) + ic('Lo sigue en el hospital', p.titular, f === 'hospital') + ic('Llamadas después del alta', p.gestor, f === 'gestion') + '</div>'; }
     return '<span class="fase-act">' + quien(act) + ' <span class="note">' + et + '</span></span>' + (f === 'hospital' && p.gestor ? ' · luego ' + avatarDe(p.gestor) : '');
   };
   window.leyendaEquipo = () => '<div class="leq">' + ETAPAS.filter(e => e[0] !== 'otros').map(([k, l]) => '<i class="edot" style="background:' + ETAPA_COLOR[k] + '"></i>' + esc(l)).join('<span class="sep">·</span>') + '</div>';
@@ -5497,7 +5498,8 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const mm2 = menuMas;
   menuMas = function () { mm2.apply(this, arguments); try { const m = $('#mbox .menu-mas'); if (m) m.insertAdjacentHTML('afterbegin', '<button class="btn sec" onclick="cerrar();ir(\'agenda\')">Agenda del equipo</button>'); } catch (e) {} };
   const st = document.createElement('style');
-  st.textContent = '.c-ok{background:#E5F2EA;color:#2F6B4F}.fase-act{font-weight:600}.fila-eq{padding:6px 0;border-top:1px solid var(--line)}.fila-eq:first-of-type{border-top:0}.fila-eq div{margin-top:3px}.fila-eq .sep{margin:0 6px;color:var(--line)}' +
+  st.textContent = '.ac-row{display:flex;gap:4px;align-items:center}.ac-i{display:inline-flex;border-radius:50%;padding:1px;cursor:default}.ac-i.act{box-shadow:0 0 0 2px var(--teal)}.ac-i.vacio{width:1.6em;height:1.6em;align-items:center;justify-content:center;color:var(--gray);border:1px dashed var(--line)}' +
+    '.c-ok{background:#E5F2EA;color:#2F6B4F}.fase-act{font-weight:600}.fila-eq{padding:6px 0;border-top:1px solid var(--line)}.fila-eq:first-of-type{border-top:0}.fila-eq div{margin-top:3px}.fila-eq .sep{margin:0 6px;color:var(--line)}' +
     'table.agenda{border-collapse:collapse;width:100%;min-width:760px;font-size:13px}table.agenda th{text-align:left;padding:6px;background:#E7EEF3;font-size:12px;white-space:nowrap}table.agenda th.hoy,table.agenda td.hoy{background:#FFF8E1}' +
     'table.agenda td{border-top:1px solid var(--line);padding:5px;vertical-align:top;min-width:90px}table.agenda td.pn{white-space:nowrap;font-weight:600}.ag{border-left:4px solid #999;background:#F6F8FA;padding:3px 6px;margin:0 0 4px;border-radius:4px;line-height:1.25}' +
     '.turno{display:grid;grid-template-columns:minmax(150px,1fr) minmax(160px,1fr) minmax(0,1.4fr) auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}.turno.hoy{background:#FFF8E1}.turno .tf span{display:block}.turno .ta{display:flex;gap:6px;align-items:center}.turno select{max-width:180px}' +
