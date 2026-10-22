@@ -4903,7 +4903,12 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     const fall = cs.length - ok.length; if (fall) s += ' ' + fall + ' intento' + (fall > 1 ? 's' : '') + ' sin contacto.';
     const evs = DB.EVENTOS.filter(e => e.id_paciente === p.id), av = avisos().filter(a => a.id_paciente === p.id);
     if (evs.length || av.length) s += ' Eventos: ' + evs.map(e => e.tipo + ' ' + fx(e.fecha)).concat(av.map(a => 'aviso QR ' + fx(a.fecha) + ' (' + a.donde + ')')).join(', ') + '.';
-    else if (dpa !== null) s += ' Sin urgencias ni rehospitalizaciones.';
+    else if (dpa !== null) {
+      // solo se afirma lo que alguien preguntó: la última llamada lograda con urgencia y rehospitalización respondidas
+      const u = ok[ok.length - 1], d = u ? datosC(u) : {};
+      if (u && d.urgencia && d.rehosp && !/desconoc/.test(d.urgencia + d.rehosp)) s += ' Sin urgencias ni rehospitalizaciones referidas al ' + fx(u.fecha_real || u.registrado) + '.';
+      else s += ' Aún sin información de urgencias u hospitalizaciones desde el alta.';
+    }
     L.push(s, '');
     // datos para llamar: siempre
     const tels = [c.tel || A.contacto_tel, A.contacto_tel2].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
