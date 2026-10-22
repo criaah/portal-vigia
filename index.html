@@ -4770,8 +4770,8 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     if (!ps.length) return h + '<div class="card">No hay pacientes con este filtro.</div>';
     h += '<div style="overflow-x:auto"><table class="tablero"><thead><tr><th>Paciente</th><th>A cargo</th><th>Etapa</th>' + COLS.map(c => '<th>' + esc(c[2]) + '</th>').join('') + '<th>Alertas</th></tr></thead><tbody>' +
       ps.map(p => { const al = alertasPac(p);
-        return '<tr onclick="ir(\'caso\',' + js(p.id) + ')"><td><b>' + esc((IDENT[p.id] || {}).nombre || p.id) + '</b><div class="t3">' + esc((IDENT[p.id] || {}).rut || '') + ' · <span class="note">' + esc(p.id) + '</span></div><div class="t3">' + ubicaTxt(p, true) + '</div><div class="t3">ingreso ' + dm(p.fecha_ingreso) + (p.fecha_alta ? ' · alta ' + dm(p.fecha_alta) : '') + '</div></td><td>' + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : esc(p.titular || '')) + '</td>' +
-          '<td>' + (() => { const x = pasosSimple(p).find(s2 => s2.t.estado === 'pendiente'), k = x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros'; return etapaPill(k, x ? x.nombre : (p.estado || 'sin pasos pendientes')); })() + '<div class="t3">' + esc(p.estado) + '</div></td>' + COLS.map(c => celda(p, c)).join('') +
+        return '<tr onclick="ir(\'caso\',' + js(p.id) + ')"><td class="tb-p"><b>' + esc((IDENT[p.id] || {}).nombre || p.id) + '</b><div class="t3 tb-l">' + esc((IDENT[p.id] || {}).rut || '') + ' · <span class="note">' + esc(p.id) + '</span></div><div class="t3 tb-l">' + ubicaTxt(p) + '</div></td><td class="tb-c">' + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : esc(p.titular || '')) + '</td>' +
+          '<td>' + (() => { const x = pasosSimple(p).find(s2 => s2.t.estado === 'pendiente'), k = x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros'; return etapaPill(k, x ? x.nombre : (p.estado || 'sin pasos pendientes')) + (x && p.estado ? '<div class="t3">' + esc(p.estado) + '</div>' : ''); })() + '</td>' + COLS.map(c => celda(p, c)).join('') +
           '<td>' + (al.length ? al.map(x => '<div class="t3" style="color:var(--red);font-weight:600">' + esc(x) + '</div>').join('') : '<span class="note">—</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>';
     return h;
   }
@@ -5352,7 +5352,9 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   // ---------------------------------------------------- a cargo según la fase
   window.aCargoTxt = (p, tabla) => {
     const f = faseDe(p), act = f === 'gestion' ? p.gestor : p.titular, et = f === 'gestion' ? 'llamadas' : 'hasta el alta';
-    if (tabla) { // solo los íconos; al pasar el mouse, quién es y qué hace
+    if (tabla) { // un solo ícono: quien lleva la fase actual. Al pasar el mouse, los tres; al tocar, se ven los nombres y se cambia
+      const act0 = f === 'gestion' ? p.gestor : p.titular, info = 'Revisó: ' + (nomC(p.creado_por) || '—') + ' · Hospital: ' + (nomC(p.titular) || '—') + ' · Llamadas: ' + (nomC(p.gestor) || '—') + ' — toque para ver o cambiar';
+      return '<button class="ac-btn" title="' + esc(info) + '" onclick="event.stopPropagation();asignarPaciente(' + js(p.id) + ')">' + (act0 ? avatarDe(act0).replace(/ title="[^"]*"/, '') : '<span class="ac-i vacio">+</span>') + '</button>';
       const ic = (lab, n, act) => n ? '<span class="ac-i' + (act ? ' act' : '') + '" title="' + esc(lab + ': ' + nomC(n)) + '">' + avatarDe(n).replace(/ title="[^"]*"/, '') + '</span>'
         : '<span class="ac-i vacio" title="' + esc(lab + ': sin asignar') + '">·</span>';
       return '<div class="ac-row">' + ic('Revisó la ficha', p.creado_por, false) + ic('Lo sigue en el hospital', p.titular, f === 'hospital') + ic('Llamadas después del alta', p.gestor, f === 'gestion') + '</div>'; }
@@ -5575,7 +5577,9 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   const mm2 = menuMas;
   menuMas = function () { mm2.apply(this, arguments); try { const m = $('#mbox .menu-mas'); if (m) m.insertAdjacentHTML('afterbegin', '<button class="btn sec" onclick="cerrar();ir(\'agenda\')">Agenda del equipo</button>'); } catch (e) {} };
   const st = document.createElement('style');
-  st.textContent = '.ac-row{display:flex;gap:4px;align-items:center}.ac-i{display:inline-flex;border-radius:50%;padding:1px;cursor:default}.ac-i.act{box-shadow:0 0 0 2px var(--teal)}.ac-i.vacio{width:1.6em;height:1.6em;align-items:center;justify-content:center;color:var(--gray);border:1px dashed var(--line)}' +
+  st.textContent = '.ac-btn{background:none;border:0;padding:2px;border-radius:50%;cursor:pointer}.ac-btn:hover{box-shadow:0 0 0 2px var(--teal)}.ac-btn .av{font-size:18px;width:1.7em;height:1.7em}table.tablero td.tb-c{width:44px;text-align:center}' +
+    'table.tablero td.tb-p{min-width:220px;max-width:280px}table.tablero td.tb-p b{display:block;line-height:1.25}table.tablero .tb-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}table.tablero .tb-l *{white-space:nowrap;display:inline}table.tablero .epill{white-space:nowrap}' +
+    '.ac-row{display:flex;gap:4px;align-items:center}.ac-i{display:inline-flex;border-radius:50%;padding:1px;cursor:default}.ac-i.act{box-shadow:0 0 0 2px var(--teal)}.ac-i.vacio{width:1.6em;height:1.6em;align-items:center;justify-content:center;color:var(--gray);border:1px dashed var(--line)}' +
     '.c-ok{background:#E5F2EA;color:#2F6B4F}.fase-act{font-weight:600}.fila-eq{padding:6px 0;border-top:1px solid var(--line)}.fila-eq:first-of-type{border-top:0}.fila-eq div{margin-top:3px}.fila-eq .sep{margin:0 6px;color:var(--line)}' +
     'table.agenda{border-collapse:collapse;width:100%;min-width:760px;font-size:13px}table.agenda th{text-align:left;padding:6px;background:#E7EEF3;font-size:12px;white-space:nowrap}table.agenda th.hoy,table.agenda td.hoy{background:#FFF8E1}' +
     'table.agenda td{border-top:1px solid var(--line);padding:5px;vertical-align:top;min-width:90px}table.agenda td.pn{white-space:nowrap;font-weight:600}.ag{border-left:4px solid #999;background:#F6F8FA;padding:3px 6px;margin:0 0 4px;border-radius:4px;line-height:1.25}' +
