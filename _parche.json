@@ -1,0 +1,1 @@
+[[155913, 155919, "panel"], [253271, 253271, "  if (VISTA === 'panel' && DB && typeof window.__panelRender === 'function') return window.__panelRender(); // Inicio unificado (v21)\n"], [545274, 545274, "  window.__panelRender = () => { const h = vPanel(); nav(); $('#app').innerHTML = h; };\n"], [545387, 545450, "return window.__panelRender();"]]

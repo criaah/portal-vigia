@@ -2565,7 +2565,7 @@ var qrcode = function() {
 
 
 const GAS = (typeof google !== 'undefined' && google.script && google.script.run) ? google.script.run : null;
-let DB = null, VISTA = 'inicio', CASO = null, FILTRO = 'todos', EV = null, VOLVER = null, DIAPO = 0, DESDE_PRES = false;
+let DB = null, VISTA = 'panel', CASO = null, FILTRO = 'todos', EV = null, VOLVER = null, DIAPO = 0, DESDE_PRES = false;
 let FP = {estado: 'curso', resp: 'todos', q: ''};
 const $ = s => document.querySelector(s);
 const movil = () => window.matchMedia('(max-width: 759px)').matches;
@@ -3532,6 +3532,7 @@ function menuMas() {
 function ir(v, caso) { VISTA = v; CASO = caso || (v === 'caso' || v === 'evaluaciones' ? CASO : null); if (v !== 'eval') EV = null; render(); window.scrollTo(0, 0); }
 function render() {
   if (!DB) return;
+  if (VISTA === 'panel' && DB && typeof window.__panelRender === 'function') return window.__panelRender(); // Inicio unificado (v21)
   if (SIMPLE() && !['hoy', 'pacientes', 'caso', 'eval'].includes(VISTA)) VISTA = 'hoy';
   nav();
   let h = DB.sinCatalogo ? '<div class="alert">La hoja PROCESO está vacía: ejecute configurar() en la planilla (menú VIGÍA). Se muestra el catálogo incluido en la aplicación.</div>' : '';
@@ -6137,9 +6138,10 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     setTimeout(() => window.scrollTo(0, y), 0);
     return h;
   }
+  window.__panelRender = () => { const h = vPanel(); nav(); $('#app').innerHTML = h; };
   render = function () {
     if (usa() && UNI.includes(VISTA)) VISTA = 'panel';
-    if (VISTA === 'panel' && DB) { const h = vPanel(); nav(); $('#app').innerHTML = h; return; }
+    if (VISTA === 'panel' && DB) return window.__panelRender();
     return r0.apply(this, arguments);
   };
   nav = function () {
