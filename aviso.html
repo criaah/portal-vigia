@@ -11,10 +11,19 @@
   window.__API = id ? 'https://script.google.com/macros/s/' + id + '/exec' : '';
   window.__URLAPP = id ? base + '?k=' + id + '&' : base;
   function llamar(fn, args) {
-    if (!window.__API) return Promise.reject(new Error('Falta el enlace completo del portal: ábralo desde el link que compartió el equipo VIGÍA.'));
+    if (!window.__API) { avisoSinLlave(); return new Promise(function () {}); }
     return fetch(window.__API, {method: 'POST', credentials: 'omit', redirect: 'follow', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify({fn: fn, args: args})})
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (j) { if (j.error) throw new Error(j.error); return j.ok; });
+  }
+  // sin la llave: se entra por el enlace corto del equipo, que la trae
+  function avisoSinLlave() {
+    var pinta = function () { var el = document.getElementById('app') || document.getElementById('caja'); if (!el) return;
+      el.innerHTML = '<div style="max-width:440px;margin:40px auto;background:#fff;border:1px solid #D5DBE1;border-radius:14px;padding:22px;text-align:center;font:15px/1.5 system-ui,sans-serif;color:#1D2733">' +
+        '<div style="font-size:19px;font-weight:700;color:#0E2A47;margin-bottom:6px">Entre por el enlace del equipo</div>' +
+        '<p style="margin:0 0 16px">Para abrir el portal en este dispositivo, use una vez el enlace corto. Después queda guardado.</p>' +
+        '<a href="https://tinyurl.com/portalvigia" style="display:inline-block;background:#1B7A86;color:#fff;text-decoration:none;font-weight:700;border-radius:10px;padding:12px 18px">Abrir tinyurl.com/portalvigia</a></div>'; };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pinta); else pinta();
   }
   function runner(ok, mal) {
     return new Proxy({}, {get: function (_, k) {
