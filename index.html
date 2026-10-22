@@ -60,7 +60,7 @@ body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-s
 header{background:var(--navy);color:#fff;padding:8px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;position:sticky;top:0;z-index:5}
 header .logos{display:inline-flex;gap:6px;align-items:center;background:#fff;border-radius:999px;padding:3px;cursor:pointer;transition:box-shadow .3s}header .logos img{height:34px;width:34px;display:block}
 header .logos img{animation:lgFlota 4.5s ease-in-out infinite}header .logos.entra img{animation:lgEntra 1.4s cubic-bezier(.2,.8,.2,1) both}
-header .logos{transition:transform 1.6s cubic-bezier(.4,0,.2,1),box-shadow .3s}header .logos:hover{transform:rotate(360deg);box-shadow:0 0 0 4px rgba(255,255,255,.28)}header .logos.toca{animation:lgToca .45s ease-out}
+header .logos{transition:transform 1.6s cubic-bezier(.4,0,.2,1),box-shadow .3s;width:40px;height:40px;padding:0;justify-content:center;transform-origin:50% 50%;flex:none}header .logos img{transform-origin:50% 50%}@media (max-width:640px){header .logos{width:36px;height:36px}}header .logos:hover{transform:rotate(360deg);box-shadow:0 0 0 4px rgba(255,255,255,.28)}header .logos.toca{animation:lgToca .45s ease-out}
 @keyframes lgEntra{0%{opacity:0;transform:rotate(-220deg) scale(.4)}100%{opacity:1;transform:none}}@keyframes lgFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 @keyframes lgToca{0%{transform:scale(1)}40%{transform:scale(.8) rotate(-25deg)}100%{transform:scale(1) rotate(0)}}
 @media (prefers-reduced-motion:reduce){header .logos img{animation:none!important}header .logos{transition:none}}
@@ -5404,8 +5404,9 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   }
   const ingresosEn = t => DB.PACIENTES.filter(p => p.fecha_ingreso >= t.desde && p.fecha_ingreso <= t.hasta);
   const estadoTurno = t => t.estado === 'hecha' ? (t.n_ingresos === '0' || t.sin_ingresos ? ['sin ingresos', 'c-ok'] : ['revisada · ' + (t.n_agregados || 0) + ' agregado' + (t.n_agregados === '1' ? '' : 's'), 'c-ok']) : t.fecha < hoy() ? ['sin registrar', 'c-venc'] : t.fecha === hoy() ? ['hoy', 'c-hoy'] : ['pendiente', 'c-pend'];
-  window.turnoAsignar = (f, n) => { const t = turnos(f, f)[0]; guardar([{tabla: 'REV_INGRESOS', registro: {id_rev: t.id_rev, fecha: f, dia: t.dia, desde: t.desde, hasta: t.hasta, asignado: n, actualizado: ahora()}}], n ? 'Revisión asignada a ' + nomC(n) : 'Asignación quitada'); };
+  window.turnoAsignar = (f, n) => { const t = turnos(f, f)[0]; DB.REV_INGRESOS = DB.REV_INGRESOS || []; guardar([{tabla: 'REV_INGRESOS', registro: {id_rev: t.id_rev, fecha: f, dia: t.dia, desde: t.desde, hasta: t.hasta, asignado: n, actualizado: ahora()}}], n ? 'Revisión asignada a ' + nomC(n) : 'Asignación quitada'); };
   window.turnoRegistrar = f => {
+    DB.REV_INGRESOS = DB.REV_INGRESOS || [];
     const t = turnos(f, f)[0], ag = ingresosEn(t).length;
     modal('<h2>Revisión de ingresos · ' + t.dia + ' ' + dm(f) + '</h2><p class="note">Ingresos a UGA del ' + dm(t.desde) + ' al ' + dm(t.hasta) + '. Agregados al piloto en ese periodo: <b>' + ag + '</b>.</p>' +
       '<div class="grid2"><div><label for="tr_n">Ingresos revisados</label><input id="tr_n" type="number" min="0" value="' + esc(t.n_ingresos || '') + '"></div><div><label for="tr_a">Agregados al piloto</label><input id="tr_a" type="number" min="0" value="' + esc(t.n_agregados || ag) + '"></div>' +
@@ -5436,10 +5437,10 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       const fz = RESP_FASE[f0.id_nodo]; if (!fz) return;
       const nomP = corto((IDENT[p.id] || {}).nombre) || p.id, que = (NOMBRE_SIMPLE[f0.id_nodo] || tareaCorta(f0)) + (t.hito ? ' ' + hitoTxt(t.hito) : '');
       const resp = fz === 'revision' ? p.creado_por : fz === 'hospital' ? p.titular : p.gestor, k = ETAPA_NODO[f0.id_nodo] || 'otros';
-      if (t.estado === 'hecha' && t.fecha_hecha) { const f = String(t.fecha_hecha).slice(0, 10); if (f >= desde && f <= hasta) add(personaDe(t.hecho_por) || resp, f, {txt: nomP + ' · ' + que, k, hecha: true, id: p.id}); return; }
+      if (t.estado === 'hecha' && t.fecha_hecha) { const f = String(t.fecha_hecha).slice(0, 10); if (f >= desde && f <= hasta) add(personaDe(t.hecho_por) || resp, f, {txt: nomP + ' · ' + que, k, hecha: true, id: p.id, fz}); return; }
       if (t.estado !== 'pendiente' || !enCurso(p) || !t.fecha_debida) return;
       const venc = t.fecha_debida < d0, f = venc ? d0 : t.fecha_debida; if (f > hasta || f < desde) return;
-      add(resp, f, {txt: nomP + ' · ' + que, k, venc, id: p.id}); });
+      add(resp, f, {txt: nomP + ' · ' + que, k, venc, id: p.id, fz}); });
     turnos(desde, hasta).forEach(t => { const f = t.fecha, txt = 'Revisar ingresos ' + dm(t.desde) + '–' + dm(t.hasta);
       if (t.estado === 'hecha') add(personaDe(t.revisado_por) || t.revisado_por || t.asignado, f, {txt, k: 'ingreso', hecha: true, turno: f});
       else if (f >= d0 || t.fecha === d0) add(t.asignado, f, {txt, k: 'ingreso', turno: f});
@@ -5467,21 +5468,53 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
         (n.startsWith('—') ? '❔' : avatarDe(n)) + '<b>' + (L.length || '✓') + '</b></span>'; }).join('') + '</div>';
     h += '<div class="ecard" style="overflow-x:auto;padding:8px"><table class="agenda"><colgroup><col style="width:46px">' + dias.map(() => '<col>').join('') + '</colgroup><thead><tr><th></th>' +
       dias.map(f => { const d = Dd(f), fin = d.getDay() === 0 || d.getDay() === 6; return '<th class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + DIAS[d.getDay()].slice(0, 3) + ' ' + d.getDate() + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      gente.map(n => '<tr><td class="pn" title="' + esc(n.startsWith('—') ? 'Sin asignar' : n + (rolDe(n) ? ' · ' + rolDe(n) : '')) + '">' + (n.startsWith('—') ? '<span class="ag-sa">❔</span>' : avatarDe(n)) + '</td>' +
+      gente.map(n => '<tr data-persona="' + esc(n.startsWith('—') ? '' : n) + '"><td class="pn" title="' + esc(n.startsWith('—') ? 'Sin asignar' : n + (rolDe(n) ? ' · ' + rolDe(n) : '')) + '">' + (n.startsWith('—') ? '<span class="ag-sa">❔</span>' : avatarDe(n)) + '</td>' +
         dias.map(f => { const L = (M[n] || {})[f] || [], d = Dd(f), fin = d.getDay() === 0 || d.getDay() === 6;
-          return '<td class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + L.map(x => '<div class="ag' + (x.hecha ? ' hecha' : '') + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + '" title="' + esc(x.txt + (x.hecha ? ' · hecha' : x.venc ? ' · atrasada' : '')) + '"' +
+          return '<td class="' + (f === d0 ? 'hoy' : '') + (fin ? ' fin' : '') + '">' + L.map(x => '<div class="ag' + (x.hecha ? ' hecha' : '') + (x.venc ? ' venc' : '') + '" style="border-left-color:' + ETAPA_COLOR[x.k] + '" title="' + esc(x.txt + (x.hecha ? ' · hecha' : x.venc ? ' · atrasada' : ' · arrastre a otra persona para reasignar')) + '"' +
+            (!x.hecha && (x.id || x.turno) ? ' data-arr="1"' + (x.id ? ' data-id="' + esc(x.id) + '" data-fz="' + esc(x.fz || '') + '"' : ' data-turno="' + esc(x.turno) + '"') : '') +
             (x.id ? ' onclick="ir(\'caso\',' + esc(js(x.id)) + ')"' : x.turno ? ' onclick="turnoRegistrar(' + esc(js(x.turno)) + ')"' : '') + '>' + (x.hecha ? '✓ ' : '') + esc(x.txt) + '</div>').join('') + '</td>'; }).join('') + '</tr>').join('') +
-      '</tbody></table></div><p class="note" style="margin-top:-4px">Pase el mouse sobre cada ícono para ver quién es. ✓ hecho · en rojo, atrasado (aparece hoy).</p>';
+      '</tbody></table></div><p class="note" style="margin-top:-4px">Pase el mouse sobre cada ícono para ver quién es. Para reasignar, arrastre la labor a la fila de otra persona (en el teléfono: mantenga apretado y arrastre). ✓ hecho · en rojo, atrasado.</p>';
     const desde = (() => { const d = new Date(l0); d.setDate(d.getDate() - 7); return isoD(d); })(), hasta = (() => { const d = new Date(l0); d.setDate(d.getDate() + 13); return isoD(d); })();
     h += '<div class="ecard"><h3>Revisión de ingresos · lunes y jueves</h3><p class="note" style="margin-top:-6px">El lunes se revisan los ingresos de jueves a domingo; el jueves, los de lunes a miércoles. Asigne quién revisa y registre cuántos hubo.</p>' + turnos(desde, hasta).map(filaTurno).join('') + '</div>';
     return h;
   }
   const MESES_C = 'ene feb mar abr may jun jul ago sep oct nov dic'.split(' ');
+  // ---------------------------------------------------- reasignar arrastrando una labor a la fila de otra persona
+  const CAMPO_FASE = {revision: 'creado_por', hospital: 'titular', gestion: 'gestor'};
+  let ARR = null;
+  document.addEventListener('pointerdown', e => {
+    const it = e.target.closest && e.target.closest('table.agenda .ag[data-arr]'); if (!it || e.button > 0) return;
+    ARR = {it, x: e.clientX, y: e.clientY, on: false, id: e.pointerId, tipo: e.pointerType};
+    if (e.pointerType !== 'mouse') ARR.t = setTimeout(() => { if (ARR) { ARR.on = true; empezar(); } }, 350); // en el teléfono: mantener apretado
+  });
+  function empezar() { const it = ARR.it, g = it.cloneNode(true); g.className = 'ag ag-fant'; g.style.borderLeftColor = it.style.borderLeftColor; document.body.appendChild(g); ARR.g = g; it.classList.add('ag-orig'); document.body.classList.add('arrastrando'); }
+  const filaEn = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest && el.closest('table.agenda tr[data-persona]'); };
+  document.addEventListener('pointermove', e => {
+    if (!ARR || e.pointerId !== ARR.id) return;
+    if (!ARR.on) { if (ARR.tipo === 'mouse' && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > 6) { ARR.on = true; empezar(); } else { if (ARR.t && Math.hypot(e.clientX - ARR.x, e.clientY - ARR.y) > 10) { clearTimeout(ARR.t); ARR = null; } return; } }
+    e.preventDefault(); ARR.g.style.left = (e.clientX + 8) + 'px'; ARR.g.style.top = (e.clientY + 8) + 'px';
+    document.querySelectorAll('table.agenda tr.drop').forEach(r => r.classList.remove('drop')); const f = filaEn(e.clientX, e.clientY); if (f && f.dataset.persona) f.classList.add('drop');
+  }, {passive: false});
+  function soltar(e) {
+    if (!ARR || e.pointerId !== ARR.id) return; const A = ARR; ARR = null; clearTimeout(A.t);
+    document.querySelectorAll('table.agenda tr.drop').forEach(r => r.classList.remove('drop')); document.body.classList.remove('arrastrando');
+    if (!A.on) return; if (A.g) A.g.remove(); A.it.classList.remove('ag-orig');
+    const f = filaEn(e.clientX, e.clientY), n = f && f.dataset.persona; window.__agNoClic = true; setTimeout(() => { window.__agNoClic = false; }, 300);
+    if (!n) return;
+    if (A.it.dataset.turno) { turnoAsignar(A.it.dataset.turno, n); return; }
+    const p = pac(A.it.dataset.id), campo = CAMPO_FASE[A.it.dataset.fz]; if (!p || !campo || p[campo] === n) return;
+    const reg = {id: p.id, actualizado: ahora()}; reg[campo] = n; Object.assign(p, reg);
+    guardar([{tabla: 'PACIENTES', registro: reg}], 'Asignado a ' + nomC(n)); render();
+  }
+  document.addEventListener('pointerup', soltar); document.addEventListener('pointercancel', e => { if (ARR && e.pointerId === ARR.id) { clearTimeout(ARR.t); if (ARR.g) ARR.g.remove(); ARR.it.classList.remove('ag-orig'); ARR = null; document.body.classList.remove('arrastrando'); } });
+  document.addEventListener('click', e => { if (window.__agNoClic && e.target.closest && e.target.closest('table.agenda')) { e.stopPropagation(); e.preventDefault(); } }, true);
   const stAg = document.createElement('style');
   stAg.textContent = '.ag-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0 10px}.ag-nav{display:flex;gap:6px;align-items:center}.ag-nav b{min-width:120px;text-align:center}' +
     '.ag-hoy{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px}.ag-p{display:inline-flex;gap:5px;align-items:center;padding:2px 9px 2px 3px;border-radius:999px;border:1px solid var(--line);font-size:13px;background:#fff;cursor:default}' +
     '.ag-p.con{background:#FFF4D6;border-color:#E8C76A}.ag-p.venc{background:#FCE8E6;border-color:#E7B2AD}.ag-p.sin{opacity:.55}' +
     'table.agenda{table-layout:fixed}table.agenda td.pn{text-align:center;cursor:default}table.agenda th.fin,table.agenda td.fin{background:#FAFBFC}table.agenda th.hoy,table.agenda td.hoy{background:#FFF8E1}' +
+    '.ag[data-arr]{cursor:grab;touch-action:pan-y}.ag-fant{position:fixed;z-index:80;pointer-events:none;width:150px;box-shadow:0 6px 18px rgba(14,42,71,.3);background:#fff;opacity:.95}.ag-orig{opacity:.35}' +
+    'body.arrastrando{user-select:none;cursor:grabbing}table.agenda tr.drop td{background:#E6F4F1!important}table.agenda tr.drop td.pn{box-shadow:inset 4px 0 0 var(--teal)}' +
     '.ag{font-size:12px;cursor:pointer;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ag.hecha{opacity:.55}.ag.venc{background:#FCE8E6}.ag-sa{font-size:15px}';
   document.head.appendChild(stAg);
   // Hoy: la revisión de ingresos del día va arriba
