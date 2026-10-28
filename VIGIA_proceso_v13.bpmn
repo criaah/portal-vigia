@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="vigia-defs" targetNamespace="https://inger.cl/vigia" exporter="VIGIA" exporterVersion="v12">
-<collaboration id="collab_vigia"><participant id="pool_vigia" name="Piloto VIGÍA · UGA INGER (v12 simplificado)" processRef="proc_vigia"/></collaboration>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="vigia-defs" targetNamespace="https://inger.cl/vigia" exporter="VIGIA" exporterVersion="v13">
+<signal id="sig_alta" name="Alta probable"/>
+<collaboration id="collab_vigia"><participant id="pool_vigia" name="Piloto VIGÍA · UGA INGER (v13)" processRef="proc_vigia"/></collaboration>
 <process id="proc_vigia" name="Seguimiento post-alta VIGÍA" isExecutable="false">
 <laneSet id="ls_vigia">
 <lane id="L1" name="Revisión de ingresos"><documentation>EU UGA · coordinación</documentation><flowNodeRef>ev_ing</flowNodeRef><flowNodeRef>t_check</flowNodeRef><flowNodeRef>g_cand</flowNodeRef><flowNodeRef>e_nocand</flowNodeRef><flowNodeRef>t_lista</flowNodeRef></lane>
 <lane id="L2" name="Seguimiento hospitalario"><documentation>EU ADG · KGO</documentation><flowNodeRef>ev_alta</flowNodeRef><flowNodeRef>t_pre</flowNodeRef><flowNodeRef>g_entra</flowNodeRef><flowNodeRef>e_noentra</flowNodeRef><flowNodeRef>t_a1</flowNodeRef><flowNodeRef>t_fol</flowNodeRef></lane>
-<lane id="L3" name="Gestión de Casos"><documentation>EU gestoras de casos</documentation><flowNodeRef>g_mrg</flowNodeRef><flowNodeRef>ev_tim</flowNodeRef><flowNodeRef>t_ll</flowNodeRef><flowNodeRef>g_res</flowNodeRef><flowNodeRef>t_urg</flowNodeRef><flowNodeRef>g_mas</flowNodeRef></lane>
+<lane id="L3" name="Gestión de Casos"><documentation>EU gestoras de casos · Ana González (titular del aviso de altas) y Kattalina Matteo (suplente)</documentation><flowNodeRef>ev_dia</flowNodeRef><flowNodeRef>t_aviso</flowNodeRef><flowNodeRef>ev_sig</flowNodeRef><flowNodeRef>g_mrg</flowNodeRef><flowNodeRef>ev_tim</flowNodeRef><flowNodeRef>t_ll</flowNodeRef><flowNodeRef>g_res</flowNodeRef><flowNodeRef>t_urg</flowNodeRef><flowNodeRef>g_mas</flowNodeRef></lane>
 <lane id="L4" name="Médico post-alta / UGA"><documentation>Médico post-alta telefónico</documentation><flowNodeRef>t_med</flowNodeRef></lane>
 <lane id="L5" name="Coordinación VIGÍA"><documentation>Coordinación del piloto</documentation><flowNodeRef>t_30</flowNodeRef><flowNodeRef>e_fin</flowNodeRef><flowNodeRef>ev_sem</flowNodeRef><flowNodeRef>t_sem</flowNodeRef><flowNodeRef>e_sem</flowNodeRef></lane>
 </laneSet>
@@ -14,7 +15,7 @@
 <exclusiveGateway id="g_cand" name="¿Candidato?"><incoming>f1</incoming><outgoing>f2</outgoing><outgoing>f3</outgoing></exclusiveGateway>
 <endEvent id="e_nocand" name="No candidato (motivo en 1 clic)"><incoming>f2</incoming></endEvent>
 <userTask id="t_lista" name="Agregar a candidatos"><documentation>Nombre, RUT, cama, fecha de ingreso y diagnóstico principal.</documentation><incoming>f3</incoming><outgoing>f4</outgoing></userTask>
-<intermediateCatchEvent id="ev_alta" name="Alta probable en 24–48 h"><documentation>Aviso en la reunión clínica UGA o botón «alta probable» del portal.</documentation><incoming>f4</incoming><outgoing>f5</outgoing><messageEventDefinition/></intermediateCatchEvent>
+<intermediateCatchEvent id="ev_alta" name="Alta probable en 24–48 h"><documentation>Lo recibe Seguimiento hospitalario desde el aviso diario de Gestión de Casos (tarea «Avisar altas probables»).</documentation><incoming>f4</incoming><outgoing>f5</outgoing><signalEventDefinition signalRef="sig_alta"/></intermediateCatchEvent>
 <userTask id="t_pre" name="Evaluación prealta y decisión"><documentation>Barthel último (TO/KNT), GLIM, destino, exclusión, CFS basal, n.º de fármacos, cuidador y fecha de alta. El portal calcula ENTRA / NO ENTRA.</documentation><incoming>f5</incoming><outgoing>f6</outgoing></userTask>
 <exclusiveGateway id="g_entra" name="¿Entra?"><incoming>f6</incoming><outgoing>f7</outgoing><outgoing>f8</outgoing></exclusiveGateway>
 <endEvent id="e_noentra" name="No entra (motivo)"><incoming>f7</incoming></endEvent>
@@ -56,6 +57,11 @@
 <sequenceFlow id="f21" sourceRef="t_30" targetRef="e_fin"/>
 <sequenceFlow id="f22" sourceRef="ev_sem" targetRef="t_sem"/>
 <sequenceFlow id="f23" sourceRef="t_sem" targetRef="e_sem"/>
+<startEvent id="ev_dia" name="Cada mañana hábil · reunión del equipo UGA"><outgoing>f24</outgoing><timerEventDefinition/></startEvent>
+<userTask id="t_aviso" name="Avisar altas probables y suspendidas"><documentation>Responsable: Gestión de Casos (Ana González; suplente Kattalina Matteo). Después de la reunión del equipo UGA, avisa en el portal y en el grupo las altas probables de pacientes candidatos o VIGÍA (código VG y cama), las altas suspendidas y las altas con HOSDOM o con exclusión. Si nadie de Gestión de Casos va a la reunión, avisa Seguimiento hospitalario.</documentation><incoming>f24</incoming><outgoing>f25</outgoing></userTask>
+<intermediateThrowEvent id="ev_sig" name="Aviso de alta probable"><incoming>f25</incoming><signalEventDefinition signalRef="sig_alta"/></intermediateThrowEvent>
+<sequenceFlow id="f24" sourceRef="ev_dia" targetRef="t_aviso"/>
+<sequenceFlow id="f25" sourceRef="t_aviso" targetRef="ev_sig"/>
 </process>
 <bpmndi:BPMNDiagram id="dia_vigia"><bpmndi:BPMNPlane id="plane_vigia" bpmnElement="collab_vigia">
 <bpmndi:BPMNShape id="s_pool" bpmnElement="pool_vigia" isHorizontal="true"><omgdc:Bounds x="80" y="30" width="2935" height="1150"/></bpmndi:BPMNShape>
@@ -111,4 +117,9 @@
 <bpmndi:BPMNEdge id="e_f21" bpmnElement="f21"><omgdi:waypoint x="2775" y="1020"/><omgdi:waypoint x="2857" y="1020"/></bpmndi:BPMNEdge>
 <bpmndi:BPMNEdge id="e_f22" bpmnElement="f22"><omgdi:waypoint x="253" y="1125"/><omgdi:waypoint x="335" y="1125"/></bpmndi:BPMNEdge>
 <bpmndi:BPMNEdge id="e_f23" bpmnElement="f23"><omgdi:waypoint x="465" y="1125"/><omgdi:waypoint x="547" y="1125"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNShape id="s_ev_dia" bpmnElement="ev_dia"><omgdc:Bounds x="217" y="622" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s_t_aviso" bpmnElement="t_aviso"><omgdc:Bounds x="335" y="600" width="130" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s_ev_sig" bpmnElement="ev_sig"><omgdc:Bounds x="547" y="622" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNEdge id="e_f24" bpmnElement="f24"><omgdi:waypoint x="253" y="640"/><omgdi:waypoint x="335" y="640"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e_f25" bpmnElement="f25"><omgdi:waypoint x="465" y="640"/><omgdi:waypoint x="547" y="640"/></bpmndi:BPMNEdge>
 </bpmndi:BPMNPlane></bpmndi:BPMNDiagram></definitions>
