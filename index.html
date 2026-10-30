@@ -52,6 +52,24 @@
 <title>Portal VIGÍA</title>
 <link rel="icon" type="image/png" href="https://criaah.github.io/portal-vigia/icono.png">
 <link rel="apple-touch-icon" href="https://criaah.github.io/portal-vigia/apple-touch-icon.png">
+<meta name="theme-color" content="#0E2A47">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="VIGÍA">
+<script>
+// v23 · 29-oct-2026 · app instalable: el manifiesto se arma con el enlace de este equipo (?k=) para que la app abierta desde la pantalla de inicio entre directo
+(function () {
+  try {
+    var b = window.__BASE || location.href.split(/[?#]/)[0].replace(/[^\/]*$/, '');
+    var id = (window.__API || '').split('/s/')[1]; id = id ? id.split('/')[0] : '';
+    var m = {name: 'Portal VIGÍA', short_name: 'VIGÍA', start_url: b + (id ? '?k=' + id : ''), scope: b, display: 'standalone',
+      background_color: '#F4F6F8', theme_color: '#0E2A47',
+      icons: [{src: b + 'icono.png', sizes: '128x128', type: 'image/png'}, {src: b + 'apple-touch-icon.png', sizes: '180x180', type: 'image/png'}]};
+    var l = document.createElement('link'); l.rel = 'manifest';
+    l.href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(m));
+    document.head.appendChild(l);
+  } catch (e) {}
+})();
+</script>
 <style>
 :root{color-scheme:light;--navy:#0E2A47;--teal:#1B7A86;--amb:#B7730F;--red:#B3261E;--grn:#2F6B4F;--ink:#1D2733;--gray:#5B6470;--line:#D5DBE1;--bg:#F4F6F8;--card:#FFFFFF;
 --MED:#0E2A47;--ENF:#3D5A80;--VIG:#1B7A86;--GC:#6A4C93;--ADG:#2F6B4F;--COORD:#2B3440;--car:#1B4F72}
@@ -6534,6 +6552,40 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     '.ar-f{padding:10px 12px;margin:0 0 10px}.ar-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:6px}.ar-g{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px}' +
     '.ar-g label{font-size:12px;margin:0}.ar-w{grid-column:span 2}@media (max-width:600px){.ar-g{grid-template-columns:1fr 1fr}.ar-w{grid-column:span 2}}';
   document.head.appendChild(st);
+})();
+</script>
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+// v23 · 29-oct-2026 · notificaciones (OneSignal). El aviso trae solo el código VG; el teléfono se marca con el rol de quien eligió «¿Quién eres?».
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+OneSignalDeferred.push(async function (OneSignal) {
+  try {
+    await OneSignal.init({appId: 'c49b7c2a-e255-4ab5-b14b-fc038d117788',
+      serviceWorkerPath: 'portal-vigia/OneSignalSDKWorker.js', serviceWorkerParam: {scope: '/portal-vigia/'}});
+    window.__OS = OneSignal; vigiaPush();
+  } catch (e) { console.warn('OneSignal', e); }
+});
+function vigiaRolTag(n) {
+  var r = '';
+  try { r = (typeof vigiaRolesDe === 'function' && vigiaRolesDe(n)[0]) || ''; } catch (e) {}
+  if (!r) try { var e = (DB.EQUIPO || []).find(function (x) { return x.persona === n; }); r = (e && e.rol) || ''; } catch (e2) {}
+  r = String(r).toLowerCase();
+  if (/gesti[oó]n de casos/.test(r)) return 'gestion';
+  if (/hospitalario|adg|kgo|kine/.test(r)) return 'hospitalario';
+  if (/revisi[oó]n|coordinaci[oó]n/.test(r)) return 'revision';
+  if (/m[eé]dico/.test(r)) return 'medico';
+  return 'equipo';
+}
+function vigiaPush() {
+  var OS = window.__OS; if (!OS) return;
+  var n = (typeof AUTH !== 'undefined' && AUTH.nombre) || ''; if (!n) return;
+  try { OS.User.addTag('rol', vigiaRolTag(n)); } catch (e) {}
+  try { if (!OS.Notifications.permission) OS.Slidedown.promptPush(); } catch (e) {}
+}
+(function () {
+  if (typeof guardarAuth !== 'function') return;
+  var g = guardarAuth;
+  guardarAuth = function () { g.apply(this, arguments); setTimeout(vigiaPush, 400); };
 })();
 </script>
 </body>
