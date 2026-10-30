@@ -6605,8 +6605,20 @@ function vigiaBannerPush() {
   document.getElementById('vg-push-x').onclick = function () { try { sessionStorage.setItem('vg-push-x', '1'); } catch (e) {} document.getElementById('vg-push').remove(); };
   var b = document.getElementById('vg-push-b');
   if (b) b.onclick = function () {
-    var p = (window.__OS && window.__OS.Notifications) ? window.__OS.Notifications.requestPermission() : Notification.requestPermission();
-    Promise.resolve(p).then(function () { setTimeout(function () { try { if (window.__OS && AUTH.nombre) window.__OS.User.addTag('rol', vigiaRolTag(AUTH.nombre)); } catch (e) {} vigiaBannerPush(); }, 800); });
+    // el permiso se pide directo al sistema dentro del toque (iOS lo exige); después se suscribe en OneSignal
+    b.textContent = 'Esperando permiso…'; b.disabled = true;
+    var fin = function (r) {
+      var OS = window.__OS;
+      if (r === 'granted' && OS) {
+        Promise.resolve().then(function () { return OS.User.PushSubscription.optIn(); }).catch(function () {})
+          .then(function () { try { if (AUTH.nombre) OS.User.addTag('rol', vigiaRolTag(AUTH.nombre)); } catch (e) {} });
+      }
+      var sp = document.querySelector('#vg-push span');
+      if (sp) sp.textContent = r === 'granted' ? 'Listo: este teléfono recibirá los avisos de VIGÍA.' : r === 'denied' ? 'Permiso rechazado. Actívalo en Ajustes › Notificaciones › VIGÍA.' : 'No se pudo pedir el permiso (' + r + '). Cierra y abre la app desde el ícono e intenta de nuevo.';
+      b.remove(); setTimeout(vigiaBannerPush, 4000);
+    };
+    try { var q = Notification.requestPermission(fin); if (q && q.then) q.then(fin, function (e) { fin('error ' + (e && e.message || e)); }); }
+    catch (e) { fin('error ' + (e && e.message || e)); }
   };
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(vigiaBannerPush, 2500); }); else setTimeout(vigiaBannerPush, 2500);
