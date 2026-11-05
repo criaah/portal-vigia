@@ -3550,23 +3550,56 @@ function chipAlta(p) {
 }
 // v31 · Gestión de Casos (o quien sepa) avisa el alta con un check y la fecha; el equipo VIGÍA va con el folleto y la epicrisis antes de que se vaya
 const avisada = p => enCurso(p) && !deAlta(p) && !!p.fecha_alta && ((typeof tareaN === 'function' && tareaN(p.id, 'T6')) || {}).estado !== 'hecha';
+// v32 · el aviso llega a coordinación (revisión de ingresos); ellos asignan quién va (seguimiento hospitalario: ADG, kinesiología) y a esa persona le llega
+const rolDe = n => ((DB && DB.EQUIPO || []).find(e => e.persona === n) || {}).rol || '';
+const esCoord = () => { try { return !!AUTH.nombre && /ingreso|revisi|coordinaci/i.test(rolDe(AUTH.nombre)); } catch (e) { return false; } };
+const equipoHosp = () => (DB.EQUIPO || []).filter(e => e.activo !== 'no' && /ADG|hospital|KGO|kinesi/i.test(e.rol || '')).map(e => e.persona);
+const nomC2 = n => String(n || '').replace(/\s*\(.*?\)/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
+function lineaAviso(p, u) {
+  const cu = p.fecha_alta === hoy() ? 'hoy' : p.fecha_alta < hoy() ? dm(p.fecha_alta) + ' (pasó)' : dm(p.fecha_alta);
+  const roja = !p.titular || u === 0;
+  return '<div class="t2" style="color:' + (roja ? '#B3261E' : '#9A5B00') + ';font-weight:700">🏠 Alta ' + cu + ' · ' + (p.titular ? 'va ' + esc(nomC2(p.titular)) + ' con folleto y epicrisis' : 'por asignar quién va') + '</div>';
+}
+function asignarAlta(id) {
+  const p = pac(id); if (!p) return;
+  const L = equipoHosp();
+  if (!L.length) return asignarPaciente(id);
+  modal('<h2>¿Quién va?</h2><p class="note" style="margin-top:0">' + rotulo(p) + ' se va de alta ' + (p.fecha_alta === hoy() ? 'hoy' : dm(p.fecha_alta)) + '. Lleva el folleto y revisa la epicrisis (prealta y Atención 1). Le aparece en «Mías» y en Novedades.</p>' +
+    '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">' + L.map(n => '<button class="btn' + (n === p.titular ? '' : ' sec') + '" onclick="asignarAltaA(' + js(id) + ',' + js(n) + ')">' + avatarDe(n) + ' ' + esc(nomC2(n)) + '</button>').join('') + '</div>' +
+    '<div class="row" style="margin-top:14px"><button class="btn sec" onclick="cerrar()">Cancelar</button></div>');
+}
+function asignarAltaA(id, n) { cerrar(); guardar([{tabla: 'PACIENTES', registro: {id, titular: n, actualizado: ahora()}}], 'Va ' + nomC2(n) + ': le aparece en «Mías»'); }
+// v32 · al pasar a llamadas (Atención 1 hecha) el aviso llega a Gestión de Casos, que asigna quién llama (Ana o Kattalina)
+const esGC = () => { try { return !!AUTH.nombre && /gesti[oó]n de casos|gestora/i.test(rolDe(AUTH.nombre)); } catch (e) { return false; } };
+const equipoGC = () => (DB.EQUIPO || []).filter(e => e.activo !== 'no' && /gesti[oó]n de casos|gestora/i.test(e.rol || '')).map(e => e.persona);
+const porAsignarGC = p => enCurso(p) && !p.gestor && ((typeof tareaN === 'function' && tareaN(p.id, 'T6')) || {}).estado === 'hecha';
+const lineaGC = p => '<div class="t2" style="color:#B3261E;font-weight:700">📞 Pasa a llamadas · por asignar quién llama</div>';
+function asignarGC(id) {
+  const p = pac(id); if (!p) return;
+  const L = equipoGC();
+  if (!L.length) return asignarPaciente(id);
+  modal('<h2>¿Quién llama?</h2><p class="note" style="margin-top:0">' + rotulo(p) + ' pasa a llamadas (48 a 96 h, días 7, 14 y 21). Le aparece en «Mías» y en Novedades.</p>' +
+    '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">' + L.map(n => '<button class="btn' + (n === p.gestor ? '' : ' sec') + '" onclick="asignarGCA(' + js(id) + ',' + js(n) + ')">' + avatarDe(n) + ' ' + esc(nomC2(n)) + '</button>').join('') + '</div>' +
+    '<div class="row" style="margin-top:14px"><button class="btn sec" onclick="cerrar()">Cancelar</button></div>');
+}
+function asignarGCA(id, n) { cerrar(); guardar([{tabla: 'PACIENTES', registro: {id, gestor: n, actualizado: ahora()}}], 'Llama ' + nomC2(n) + ': le aparece en «Mías»'); }
 function bloqueAlta(p) {
   if (!enCurso(p) || deAlta(p)) return '';
   const jid = js(p.id);
-  if (!p.fecha_alta) return '<div class="row" style="gap:8px;margin:2px 0 10px"><button class="btn" onclick="altaProbable(' + jid + ')">✓ Se va de alta</button><span class="note">avisa al equipo VIGÍA</span></div>';
+  if (!p.fecha_alta) return '<div class="row" style="gap:8px;margin:2px 0 10px"><button class="btn" onclick="altaProbable(' + jid + ')">✓ Se va de alta</button><span class="note">avisa a coordinación</span></div>';
   return '<div class="row" style="gap:8px;margin:2px 0 10px">' + chipAlta(p) +
     '<button class="btn sm sec" onclick="altaProbable(' + jid + ')">Cambiar fecha</button><button class="btn sm sec" onclick="altaSuspendida(' + jid + ')">Suspender</button></div>';
 }
 function altaProbable(id) {
   const p = pac(id); if (!p) return;
   const man = sumar(hoy(), 1);
-  modal('<h2>¿Se va de alta?</h2><p class="note" style="margin-top:0">' + nomLista(p) + (p.unidad ? ' · ' + esc(camaCorta(p)) : '') + '. El equipo VIGÍA recibe el aviso para llevar el folleto y revisar la epicrisis antes de que se vaya.</p>' +
+  modal('<h2>¿Se va de alta?</h2><p class="note" style="margin-top:0">' + nomLista(p) + (p.unidad ? ' · ' + esc(camaCorta(p)) : '') + '. Coordinación recibe el aviso y asigna quién va con el folleto y la epicrisis antes de que se vaya.</p>' +
     '<div class="row" style="gap:8px;margin:6px 0"><button class="btn sec" type="button" onclick="$(\'#f_fa\').value=\'' + hoy() + '\'">Hoy</button><button class="btn sec" type="button" onclick="$(\'#f_fa\').value=\'' + man + '\'">Mañana</button>' +
     '<input id="f_fa" type="date" value="' + esc(p.fecha_alta || hoy()) + '" style="max-width:180px"></div>' +
     '<div class="row" style="margin-top:14px"><button class="btn" id="bok">✓ Avisar alta</button><button class="btn sec" onclick="cerrar()">Cancelar</button></div>');
   $('#bok').onclick = () => { const f = $('#f_fa').value; if (!f) return; cerrar();
     const p2 = Object.assign({}, p, {fecha_alta: f});
-    guardar([{tabla: 'PACIENTES', registro: {id, fecha_alta: f, actualizado: ahora()}}].concat(opsRecalcular(p2)), 'Alta avisada para ' + (f === hoy() ? 'hoy' : dm(f)) + ': el equipo VIGÍA va con el folleto'); };
+    guardar([{tabla: 'PACIENTES', registro: {id, fecha_alta: f, actualizado: ahora()}}].concat(opsRecalcular(p2)), 'Alta avisada para ' + (f === hoy() ? 'hoy' : dm(f)) + ': coordinación asigna quién va'); };
 }
 function altaSuspendida(id) {
   const p = pac(id); if (!p) return;
@@ -6634,6 +6667,7 @@ function vigiaPush() {
   var OS = window.__OS; if (!OS) return;
   var n = (typeof AUTH !== 'undefined' && AUTH.nombre) || ''; if (!n) return;
   try { OS.User.addTag('rol', vigiaRolTag(n)); } catch (e) {}
+  try { OS.User.addTag('persona', sinTildes(n).toLowerCase().replace(/\s*\(.*?\)/g, '').trim().replace(/[^a-z0-9]+/g, '_')); } catch (e) {} // v32 · para avisar a una persona
   try { vigiaBannerPush(); } catch (e) {}
 }
 (function () {
@@ -6711,9 +6745,9 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     const d = desde(), L = [];
     DB.PACIENTES.forEach(p => {
       if ((p.creado || '') > d && ajeno(p.creado_por)) L.push({f: p.creado, id: p.id, t: 'agregado al piloto', q: p.creado_por});
-      else if ((p.actualizado || '') > d && enCurso(p) && !deAlta(p)) L.push({f: p.actualizado, id: p.id, t: p.fecha_alta ? '🏠 se va de alta ' + (p.fecha_alta === hoy() ? 'hoy' : dm(p.fecha_alta)) + ': llevar folleto y epicrisis' : 'alta suspendida o sin fecha', al: !!p.fecha_alta && p.fecha_alta <= sumar(hoy(), 1), q: ''});
+      else if ((p.actualizado || '') > d && enCurso(p) && !deAlta(p)) L.push({f: p.actualizado, id: p.id, t: p.fecha_alta ? (p.titular && p.titular === yo() ? 'te toca: ' : '') + '🏠 se va de alta ' + (p.fecha_alta === hoy() ? 'hoy' : dm(p.fecha_alta)) + (p.titular ? ': va ' + nomC2(p.titular) + ' con folleto y epicrisis' : ': por asignar quién va') : 'alta suspendida o sin fecha', al: !!p.fecha_alta && (p.fecha_alta <= sumar(hoy(), 1) || !p.titular), q: ''});
     });
-    DB.TAREAS.forEach(t => { const f = String(t.actualizado || t.fecha_hecha || ''); if (t.estado === 'hecha' && f > d && ajeno(t.hecho_por)) { const n = (P(t.n) || {}).id_nodo; if (NOM[n]) L.push({f, id: t.id_paciente, t: NOM[n] + (t.hito ? ' ' + hitoTxt(t.hito) : '') + ' hecha', q: t.hecho_por}); } });
+    DB.TAREAS.forEach(t => { const f = String(t.actualizado || t.fecha_hecha || ''); if (t.estado === 'hecha' && f > d && ajeno(t.hecho_por)) { const n = (P(t.n) || {}).id_nodo; if (NOM[n]) L.push({f, id: t.id_paciente, al: n === 'T6' && porAsignarGC(pac(t.id_paciente) || {}), t: (n === 'T6' && porAsignarGC(pac(t.id_paciente) || {}) ? '📞 pasa a llamadas, por asignar quién llama · ' : '') + NOM[n] + (t.hito ? ' ' + hitoTxt(t.hito) : '') + ' hecha', q: t.hecho_por}); } });
     DB.CONTACTOS.forEach(c => { const f = String(c.registrado || c.fecha_real || ''); if (f > d && ajeno(c.registrado_por)) { const al = c.salida && c.salida !== 'sin problema nuevo'; L.push({f, id: c.id_paciente, t: 'llamada ' + hitoTxt(c.hito) + ': ' + (c.resultado || '') + (al ? ' · ⚠️ ' + c.salida : ''), q: c.registrado_por, al}); } });
     DB.EVENTOS.forEach(e => { const f = String(e.registrado || ''); if (f > d && ajeno(e.registrado_por)) L.push({f, id: e.id_paciente, t: '⚠️ ' + e.tipo + ' ' + dm(e.fecha), q: e.registrado_por, al: true}); });
     (DB.CANDIDATOS || []).forEach(c => { if ((c.creado || '') > d && c.estado === 'por revisar') L.push({f: c.creado, id: '', t: 'candidato nuevo desde la VGI: ' + (c.iniciales || '') + (c.edad ? ', ' + c.edad + ' años' : ''), q: ''}); });
@@ -6760,7 +6794,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   const ETAPAS_ROL = {revision: ['ingreso', 'cierre'], hospitalario: ['prealta', 'a1'], gestion: ['ingreso', 'prealta', 'a1', 'llamadas', 'cierre']};
   const rolYo = () => { try { return typeof vigiaRolTag === 'function' && YO() ? vigiaRolTag(YO()) : ''; } catch (e) { return ''; } };
   const aCargoAhora = p => (deAlta(p) || POST_ALTA.includes(p.estado)) ? p.gestor : p.titular;
-  const pasaVer = f => ST.ver === 'mias' ? !!YO() && aCargoAhora(f.p) === YO() : ST.ver === 'rol' ? (ETAPAS_ROL[rolYo()] ? ETAPAS_ROL[rolYo()].includes(f.k) || (f.av && rolYo() === 'hospitalario') : true) : true;
+  const pasaVer = f => ST.ver === 'mias' ? !!YO() && (aCargoAhora(f.p) === YO() || (f.av && !f.p.titular && esCoord()) || (porAsignarGC(f.p) && esGC())) : ST.ver === 'rol' ? (ETAPAS_ROL[rolYo()] ? ETAPAS_ROL[rolYo()].includes(f.k) || (f.av && rolYo() === 'hospitalario') : true) : true;
   const proxDe = p => pasosSimple(p).find(x => x.t.estado === 'pendiente' && !bloqueada(p, x.t));
   const urg = t => { if (!t || !t.fecha_debida) return 3; const d = dif(t.fecha_debida, hoy()); return d < 0 ? 0 : d <= 1 ? 1 : 2; };
   const URG_COL = ['#B3261E', '#B7791F', '#8A96A3', '#8A96A3'];
@@ -6782,7 +6816,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     const enc = DB.PACIENTES.filter(enCurso);
     const filas = enc.map(p => { const x = proxDe(p), av = avisada(p);
       const ua = av ? (p.fecha_alta < hoy() ? 0 : p.fecha_alta <= sumar(hoy(), 1) ? 1 : 2) : 3;
-      return {p, x, av, k: x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros', u: Math.min(x ? urg(x.t) : 3, ua)}; }).filter(pasaVer);
+      return {p, x, av, k: x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros', u: Math.min(x ? urg(x.t) : 3, ua, porAsignarGC(p) ? 1 : 3)}; }).filter(pasaVer);
     const cuenta = k => filas.filter(f => f.k === k).length;
     const nov = typeof vigiaNovedades === 'function' ? vigiaNovedades().length : 0;
     let h = '<div class="v27-top"><h2 style="margin:0">Hoy</h2><div class="row" style="gap:8px">' +
@@ -6803,10 +6837,10 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     h += L.map(({p, x, k, u, av}) => {
       const cuando = x && x.t.fecha_debida ? (u === 0 ? 'vencida ' + dm(x.t.fecha_debida) : x.t.fecha_debida === hoy() ? 'hoy' : u === 1 ? 'mañana' : dm(x.t.fecha_debida)) : '';
       return '<div class="v27-c" style="border-left-color:' + ETAPA_COLOR[k] + '" onclick="ir(\'caso\',' + js(p.id) + ')"><i class="v27-u" style="background:' + URG_COL[u] + '"></i><div class="tx"><div class="t1">' + rotulo(p) + '</div>' +
-        (av ? '<div class="t2" style="color:' + (u === 0 ? '#B3261E' : '#9A5B00') + ';font-weight:700">🏠 Alta ' + (p.fecha_alta === hoy() ? 'hoy' : p.fecha_alta < hoy() ? dm(p.fecha_alta) + ' (pasó)' : dm(p.fecha_alta)) + ' · llevar folleto y epicrisis</div>' : '') +
+        (av ? lineaAviso(p, u) : '') + (porAsignarGC(p) ? lineaGC(p) : '') +
         '<div class="t2">' + (x ? '<b style="color:' + ETAPA_COLOR[k] + '">' + esc(x.nombre.replace(/ antes del alta$/, '').replace(/^Revisión prealta: /, 'Prealta: ')) + '</b>' : '<span class="note">sin pasos pendientes</span>') +
         (cuando ? ' <span class="note" style="color:' + URG_COL[u] + ';font-weight:' + (u < 2 ? 700 : 400) + '">· ' + cuando + '</span>' : '') + '</div></div>' +
-        '<div class="fin">' + (!deAlta(p) && !p.fecha_alta ? '<button class="btn sm sec" title="Avisar que se va de alta" onclick="event.stopPropagation();altaProbable(' + js(p.id) + ')">🏠 Alta</button> ' : '') + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : '') + '</div></div>';
+        '<div class="fin">' + (porAsignarGC(p) && esGC() ? '<button class="btn sm" onclick="event.stopPropagation();asignarGC(' + js(p.id) + ')">Asignar</button> ' : '') + (av && esCoord() ? '<button class="btn sm' + (p.titular ? ' sec' : '') + '" onclick="event.stopPropagation();asignarAlta(' + js(p.id) + ')">' + (p.titular ? 'Cambiar' : 'Asignar') + '</button> ' : '') + (!deAlta(p) && !p.fecha_alta ? '<button class="btn sm sec" title="Avisar que se va de alta" onclick="event.stopPropagation();altaProbable(' + js(p.id) + ')">🏠 Alta</button> ' : '') + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : '') + '</div></div>';
     }).join('');
     return h;
   }
@@ -6858,7 +6892,11 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
       '<div>' + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : '') + '</div></div>';
     if (avQR) h += '<div class="alert" style="margin-top:8px">⚠️ Tiene avisos de consulta (QR) sin gestionar.</div>';
     h += bloqueAlta(p);
-    if (avisada(p)) h += '<div class="card" style="border-left:6px solid #B7791F;background:#FFF8E6"><b>🏠 Se va de alta ' + (p.fecha_alta === hoy() ? 'hoy' : dm(p.fecha_alta)) + '</b><div class="t3">Equipo VIGÍA: ir con el folleto y revisar la epicrisis con el paciente y quien lo cuida (Atención 1).</div>' +
+    if (porAsignarGC(p)) h += '<div class="card" style="border-left:6px solid #B3261E;background:#FFF8E6"><b>📞 Pasa a llamadas</b><div style="margin:4px 0"><b style="color:#B3261E">Por asignar quién llama</b> <span class="note">(Gestión de Casos)</span>' +
+      (esGC() ? ' <button class="btn sm" onclick="asignarGC(' + jid + ')">Asignar</button>' : '') + '</div></div>';
+    if (avisada(p)) h += '<div class="card" style="border-left:6px solid ' + (p.titular ? '#B7791F' : '#B3261E') + ';background:#FFF8E6"><b>🏠 Se va de alta ' + (p.fecha_alta === hoy() ? 'hoy' : dm(p.fecha_alta)) + '</b>' +
+      '<div style="margin:4px 0">' + (p.titular ? 'Va ' + avatarDe(p.titular) + ' <b>' + esc(nomC2(p.titular)) + '</b>' : '<b style="color:#B3261E">Por asignar quién va</b>') + (esCoord() ? ' <button class="btn sm sec" onclick="asignarAlta(' + jid + ')">' + (p.titular ? 'Cambiar' : 'Asignar') + '</button>' : '') + '</div>' +
+      '<div class="t3">Con el folleto, revisar la epicrisis con el paciente y quien lo cuida (prealta y Atención 1).</div>' +
       '<div class="row" style="gap:8px;margin-top:8px"><button class="btn" onclick="abrirAlta(' + jid + ')">Folleto y epicrisis</button>' + (tareaN(p.id, 'T6') ? '<button class="btn sec" onclick="abrirTarea(' + jid + ',' + js(tareaN(p.id, 'T6').n) + ',\'\')">Atención 1</button>' : '') + '</div></div>';
     h += linea(p, prox);
     h += '<div class="card ahora" style="margin-top:10px">' + (prox ? '<div class="row" style="justify-content:space-between;align-items:center"><div><div class="note"><b>AHORA</b></div><b style="font-size:17px">' + esc(prox.nombre) + '</b> ' + chip(estadoTarea(prox.t)) +
@@ -6934,7 +6972,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
         paso('llamadas', 'Llamadas', '48 h · d7 · d14 · d21', 'Gestión de Casos') +
         paso('cierre', '30 días', 'Revisión de ficha', 'Coordinación') + '</div>' +
         '<div class="v28-alta"><b>El aviso de alta</b><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:6px">' +
-        '<span>Gestión de Casos marca</span><span class="chip c-hoy">✓ se va de alta · fecha</span><span>→ el equipo VIGÍA va con el folleto y la epicrisis (prealta y Atención 1) → queda</span><span class="chip c-ok">de alta</span><span>→ parten las llamadas</span></div>' +
+        '<span>Gestión de Casos marca</span><span class="chip c-hoy">✓ se va de alta · fecha</span><span>→ coordinación asigna quién va → esa persona va con el folleto y la epicrisis (prealta y Atención 1) → Gestión de Casos asigna quién llama → parten las llamadas</span></div>' +
         '<div class="note" style="margin-top:6px">¿No se fue? <b>Suspender</b> · ¿Cambió el día? <b>Cambiar</b>. Lo ve todo el equipo al instante.</div></div>',
       () => '<h2>Inicio: ¿qué me toca hoy?</h2><div class="v28-dos"><div>' +
         '<div class="v28-mini"><span class="v28-b">🔔<sup>3</sup></span><span class="v28-b">🔍</span><span class="v28-seg"><b>Mías</b>|Mi rol|Todos</span></div>' +
