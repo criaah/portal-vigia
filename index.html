@@ -2659,17 +2659,33 @@ let IDENT = {};
 let quienTxt = p => (p.titular && typeof avatarDe === 'function' ? avatarDe(p.titular) + ' ' : '') + quienTxt0(p);
 // hospitalizado: importa la cama; ya de alta: importa a quién llamar y el próximo control
 let CONTACTO = {};
-const deAlta = p => !!p.fecha_alta && p.fecha_alta <= hoy();
+// v26 · de alta = estado posterior al alta, o Atención 1 hecha y la fecha de alta ya llegó: la fecha probable sola ya no lo da de alta
+const POST_ALTA = ['en seguimiento', 'cerrado día 21', 'cerrado 30 d', 'sale por reingreso'];
+const deAlta = p => POST_ALTA.includes(p.estado) || (!!p.fecha_alta && p.fecha_alta <= hoy() && typeof tareaN === 'function' && ((tareaN(p.id, 'T6') || {}).estado === 'hecha'));
 const camaTxt = p => { const u = String(p.unidad || ''), c = u.match(/cama\s*[:#]?\s*[\w-]+/i), sa = u.match(/sala\s*[:#]?\s*[\w-]+/i), ug = u.match(/UGA\s*\d/i);
   return [ug && ug[0], sa && sa[0], c && c[0]].filter(Boolean).join(' · ') || u; };
 const ubicaTxt = (p, largo) => {
+  if (!largo && deAlta(p)) return (p.unidad ? '<span class="note">(ex ' + esc(camaTxt(p)) + ')</span> · ' : '') + (p.fecha_alta ? 'día ' + Math.max(0, dif(hoy(), p.fecha_alta)) + ' post-alta' : 'de alta');
   if (!deAlta(p)) return p.unidad ? '🛏️ ' + esc(camaTxt(p)) : '🛏️ <span class="note">sin cama registrada</span>';
   const c = CONTACTO[p.id];
   if (!c || !(c.tel || c.nombre)) return '📞 <span class="note">falta el contacto (resumen de alta)</span>';
   return '📞 ' + esc([c.nombre, c.parentesco ? '(' + c.parentesco + ')' : ''].filter(Boolean).join(' ')) + (c.tel ? ' · <b>' + esc(c.tel) + '</b>' : '') +
     (largo && c.comunicacion ? '<br><span class="note">' + esc(c.comunicacion) + '</span>' : '') + (largo && c.control ? '<br>🗓️ ' + esc(c.control) : '');
 };
-const quienTxt0 = p => { const x = IDENT[p.id] || {}; return (x.nombre || x.rut ? esc(x.nombre || '') + (x.rut ? ' · ' + esc(x.rut) : '') + ' <span class="note">' + esc(p.id) + '</span>' : esc(p.id)) + ' · <span class="ubica">' + ubicaTxt(p) + '</span>'; };
+// v26 · en las listas: primer nombre (+ inicial del apellido si se repite) y cama; RUT, nombre completo y código VG quedan en la ficha
+const cap1 = w => w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : '';
+const partesNombre = n => { n = String(n || '').trim(); if (!n) return ['', '']; if (n.includes(',')) { const [ap, no] = n.split(','); return [no.trim().split(/\s+/)[0], ap.trim().split(/\s+/)[0]]; } const w = n.split(/\s+/); return [w[0], w.length > 2 ? w[w.length - 2] : (w[1] || '')]; };
+function nomLista(p) {
+  const x = IDENT[p.id] || {}; if (!x.nombre) return esc(p.id);
+  const [no, ap] = partesNombre(x.nombre), k = sinTildes(no).toLowerCase();
+  const rep = (DB && DB.PACIENTES || []).filter(q => q.id !== p.id && enCurso(q) && sinTildes(partesNombre((IDENT[q.id] || {}).nombre)[0]).toLowerCase() === k).length;
+  return esc(cap1(no) + (rep && ap ? ' ' + cap1(ap).charAt(0) + '.' : ''));
+}
+const camaCorta = p => { const u = String(p.unidad || ''), c = u.match(/cama\s*[:#]?\s*([\w-]+)/i), k = u.match(/\b([A-Za-z]\d{1,2})\b/); return c ? c[1] : k ? k[1].toUpperCase() : u; };
+// rótulo de lista: hospitalizado = cama y primer nombre; de alta = primer nombre, cama anterior y día post-alta
+const rotulo = p => deAlta(p) ? nomLista(p) + ' <span class="note">' + (p.unidad ? '(ex ' + esc(camaCorta(p)) + ') · ' : '') + (p.fecha_alta ? 'día ' + Math.max(0, dif(hoy(), p.fecha_alta)) + ' post-alta' : 'de alta') + '</span>'
+  : (p.unidad ? '🛏️ ' + esc(camaCorta(p)) + ' · ' : '🛏️ <span class="note">sin cama</span> · ') + nomLista(p);
+const quienTxt0 = p => rotulo(p);
 const identTxt = id => { const x = IDENT[id]; return x && (x.nombre || x.rut) ? ' · ' + esc(x.nombre || '') + (x.rut ? ' <span class="note">' + esc(x.rut) + '</span>' : '') : ''; };
 function rutValidoCli(s) { const r = String(s || '').replace(/[^0-9kK]/g, '').toUpperCase(); if (r.length < 2) return false; const c = r.slice(0, -1); let s2 = 0, m = 2; for (let i = c.length - 1; i >= 0; i--) { s2 += +c[i] * m; m = m === 7 ? 2 : m + 1; } const e = 11 - (s2 % 11); return r.slice(-1) === (e === 11 ? '0' : e === 10 ? 'K' : String(e)); }
 async function cargar(silencioso) {
@@ -3519,11 +3535,39 @@ function pasosSimple(p) {
   HITOS.forEach(([k, l]) => fila('T12', k, 'Llamada ' + l)); fila('T22', '', 'Revisión a 30 días');
   return L;
 }
+// v26 · alta probable, confirmada o suspendida (sin columnas nuevas: se apoya en fecha_alta y en la Atención 1)
+function estadoAlta(p) {
+  if (!enCurso(p)) return '';
+  if (deAlta(p)) return 'confirmada';
+  return p.fecha_alta ? 'probable' : '';
+}
+function chipAlta(p) {
+  const e = estadoAlta(p);
+  if (e === 'probable') return '<span class="chip c-hoy">alta prob. ' + dm(p.fecha_alta) + '</span>';
+  if (e === 'confirmada') return '<span class="chip c-ok">de alta</span>';
+  return '';
+}
+function bloqueAlta(p) {
+  if (!enCurso(p) || deAlta(p)) return '';
+  const jid = js(p.id);
+  return '<div class="row" style="gap:8px;margin:2px 0 10px">' + (p.fecha_alta ? chipAlta(p) : '<span class="note">sin fecha de alta</span>') +
+    '<button class="btn sm sec" onclick="altaProbable(' + jid + ')">' + (p.fecha_alta ? 'Cambiar fecha de alta' : 'Alta probable…') + '</button>' +
+    (p.fecha_alta ? '<button class="btn sm sec" onclick="altaSuspendida(' + jid + ')">Alta suspendida</button>' : '') + '</div>';
+}
+function altaProbable(id) {
+  const p = pac(id); if (!p) return;
+  modal('<h2>Alta probable</h2><label for="f_fa">Fecha probable de alta</label><input id="f_fa" type="date" value="' + esc(p.fecha_alta || hoy()) + '">' +
+    '<div class="row" style="margin-top:14px"><button class="btn" id="bok">Guardar</button><button class="btn sec" onclick="cerrar()">Cancelar</button></div>');
+  $('#bok').onclick = () => { const f = $('#f_fa').value; if (!f) return; cerrar(); guardar([{tabla: 'PACIENTES', registro: {id, fecha_alta: f, actualizado: ahora()}}], 'Alta probable ' + dm(f)); };
+}
+function altaSuspendida(id) {
+  guardar([{tabla: 'PACIENTES', registro: {id, fecha_alta: '', actualizado: ahora()}}], 'Alta suspendida: queda hospitalizado sin fecha');
+}
 function vCasoSimple(p) {
   const jid = js(p.id), L = pasosSimple(p), prox = L.find(x => x.t.estado === 'pendiente' && !bloqueada(p, x.t));
   const I0 = IDENT[p.id] || {};
   let h = '<!--cab--><a href="javascript:void 0" onclick="ir(\'pacientes\')">← pacientes</a><h2 style="margin:4px 0 2px">' + esc(I0.nombre || p.id) + ' <span class="chip c-pend">' + esc(p.estado) + '</span></h2>' +
-    '<p class="note" style="margin-top:0">' + [I0.rut ? '<b>' + esc(I0.rut) + '</b>' : '', ubicaTxt(p, true), 'ingreso ' + dm(p.fecha_ingreso), p.fecha_alta ? 'alta ' + dm(p.fecha_alta) : '', esc(p.id)].filter(Boolean).join(' · ') + '</p><!--/cab-->';
+    '<p class="note" style="margin-top:0">' + [I0.rut ? '<b>' + esc(I0.rut) + '</b>' : '', ubicaTxt(p, true), 'ingreso ' + dm(p.fecha_ingreso), p.fecha_alta ? 'alta ' + dm(p.fecha_alta) : ''].filter(Boolean).join(' · ') + '</p>' + bloqueAlta(p) + '<!--/cab-->';
   h += '<div class="card ahora"><div class="note"><b>AHORA</b></div>' + (prox ? '<div class="row" style="margin-top:4px"><b>' + esc(prox.nombre) + '</b> ' + chip(estadoTarea(prox.t)) + '</div><div class="note">' + esc(RESP_SIMPLE[prox.nodo] || '') + '</div>' +
     '<button class="btn" style="margin-top:8px" onclick="abrirTarea(' + jid + ',' + js(prox.t.n) + ',' + js(prox.hito) + ')">Registrar</button>' : '<b>Sin pasos pendientes.</b>') + '</div>';
   h += '<h3>Pasos</h3><div class="card lista">' + L.map(x => '<div class="li"><div class="tx"><b>' + esc(x.nombre) + '</b><div class="t3">' + esc(RESP_SIMPLE[x.nodo] || '') + '</div></div>' + chip(estadoTarea(x.t)) +
@@ -3545,8 +3589,8 @@ function vPacientesSimple() {
   if (!ps.length) return h + '<div class="card">No hay pacientes con este filtro.</div>';
   return h + ps.map(([p, x]) => { const I = IDENT[p.id] || {};
     const ek = x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros';
-    return '<div class="tcard" style="border-left-color:' + ETAPA_COLOR[ek] + ';border-left-width:6px" onclick="ir(\'caso\',' + js(p.id) + ')"><div class="tx"><div class="t1">' + esc(I.nombre || p.id) + (I.rut ? ' · ' + esc(I.rut) : '') + '</div>' +
-    '<div class="t2">' + (x ? etapaPill(ek, x.nombre) : etapaPill('otros', 'sin pasos pendientes')) + ' <span class="note">' + esc(p.estado) + '</span></div><div class="t2">' + ubicaTxt(p, true) + '</div><div class="t3">' + (typeof aCargoTxt === 'function' ? aCargoTxt(p) + ' · ' : '') + [I.nombre ? esc(p.id) : '', p.fecha_alta ? 'alta ' + dm(p.fecha_alta) : ''].filter(Boolean).join(' · ') + '</div></div>' +
+    return '<div class="tcard" style="border-left-color:' + ETAPA_COLOR[ek] + ';border-left-width:6px" onclick="ir(\'caso\',' + js(p.id) + ')"><div class="tx"><div class="t1">' + rotulo(p) + '</div>' +
+    '<div class="t2">' + (x ? etapaPill(ek, x.nombre) : etapaPill('otros', 'sin pasos pendientes')) + ' ' + chipAlta(p) + '</div><div class="t3">' + (typeof aCargoTxt === 'function' ? aCargoTxt(p) : '') + '</div></div>' +
     '<div class="fin">' + (x ? chip(estadoTarea(x.t)) : '') + '</div></div>'; }).join('');
 }
 // ============================================================ vistas
@@ -4828,7 +4872,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     if (!ps.length) return h + '<div class="card">No hay pacientes con este filtro.</div>';
     h += '<div style="overflow-x:auto"><table class="tablero"><thead><tr><th>Paciente</th><th>A cargo</th><th>Etapa</th>' + COLS.map(c => '<th>' + esc(c[2]) + '</th>').join('') + '<th>Alertas</th></tr></thead><tbody>' +
       ps.map(p => { const al = alertasPac(p);
-        return '<tr onclick="ir(\'caso\',' + js(p.id) + ')"><td class="tb-p"><b>' + esc((IDENT[p.id] || {}).nombre || p.id) + '</b><div class="t3 tb-l">' + esc((IDENT[p.id] || {}).rut || '') + ' · <span class="note">' + esc(p.id) + '</span></div><div class="t3 tb-l">' + ubicaTxt(p) + '</div></td><td class="tb-c">' + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : esc(p.titular || '')) + '</td>' +
+        return '<tr onclick="ir(\'caso\',' + js(p.id) + ')"><td class="tb-p"><b>' + rotulo(p) + '</b><div class="t3 tb-l">' + chipAlta(p) + '</div></td><td class="tb-c">' + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : esc(p.titular || '')) + '</td>' +
           '<td>' + (() => { const x = pasosSimple(p).find(s2 => s2.t.estado === 'pendiente'), k = x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros'; return etapaPill(k, x ? x.nombre : (p.estado || 'sin pasos pendientes')) + (x && p.estado ? '<div class="t3">' + esc(p.estado) + '</div>' : ''); })() + '</td>' + COLS.map(c => celda(p, c)).join('') +
           '<td>' + (al.length ? al.map(x => '<div class="t3" style="color:var(--red);font-weight:600">' + esc(x) + '</div>').join('') : '<span class="note">—</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>';
     return h;
@@ -6638,6 +6682,58 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     if (!el) return;
     if (ok && typeof cargar === 'function') { el.textContent = 'Actualizando…'; el.style.transform = 'translate(-50%,0)'; try { cargar(); } catch (e) {} setTimeout(function () { el.style.transform = 'translate(-50%,-48px)'; }, 1500); }
     else el.style.transform = 'translate(-50%,-48px)'; }, {passive: true});
+})();
+</script>
+<script>
+// ============================================================ v26 · 05-nov-2026 · Novedades desde tu última visita: lo que hoy se pregunta por WhatsApp
+// Se calcula en el dispositivo con lo que ya trae el portal (pacientes, pasos hechos, llamadas, eventos y candidatos). Lo propio no aparece.
+(function () {
+  const NOM = {T1: 'Revisión de ficha al ingreso', T4: 'Revisión prealta', G1: 'Revisión prealta', T6: 'Atención 1', T12: 'Llamada', T21: 'Cierre día 21', T22: 'Revisión a 30 días'};
+  const kv = () => 'vg-visto-' + ((typeof AUTH !== 'undefined' && AUTH.nombre) || 'equipo');
+  const leer = () => { try { return localStorage.getItem(kv()) || ''; } catch (e) { return ''; } };
+  const desde = () => leer() || new Date(Date.now() - 2 * 864e5 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const yo = () => (typeof AUTH !== 'undefined' && AUTH.nombre) || '';
+  const ajeno = q => !q || q !== yo();
+  const nm = id => { const p = pac(id); return p ? rotulo(p) : esc(id); };
+  const fh = x => esc(String(x).slice(8, 10) + '-' + String(x).slice(5, 7) + (String(x).length > 10 ? ' ' + String(x).slice(11, 16) : ''));
+  function novedades() {
+    if (!DB) return [];
+    const d = desde(), L = [];
+    DB.PACIENTES.forEach(p => {
+      if ((p.creado || '') > d && ajeno(p.creado_por)) L.push({f: p.creado, id: p.id, t: 'agregado al piloto', q: p.creado_por});
+      else if ((p.actualizado || '') > d && enCurso(p) && !deAlta(p)) L.push({f: p.actualizado, id: p.id, t: p.fecha_alta ? 'alta probable ' + dm(p.fecha_alta) : 'sin fecha de alta (suspendida o por definir)', q: ''});
+    });
+    DB.TAREAS.forEach(t => { const f = String(t.actualizado || t.fecha_hecha || ''); if (t.estado === 'hecha' && f > d && ajeno(t.hecho_por)) { const n = (P(t.n) || {}).id_nodo; if (NOM[n]) L.push({f, id: t.id_paciente, t: NOM[n] + (t.hito ? ' ' + hitoTxt(t.hito) : '') + ' hecha', q: t.hecho_por}); } });
+    DB.CONTACTOS.forEach(c => { const f = String(c.registrado || c.fecha_real || ''); if (f > d && ajeno(c.registrado_por)) { const al = c.salida && c.salida !== 'sin problema nuevo'; L.push({f, id: c.id_paciente, t: 'llamada ' + hitoTxt(c.hito) + ': ' + (c.resultado || '') + (al ? ' · ⚠️ ' + c.salida : ''), q: c.registrado_por, al}); } });
+    DB.EVENTOS.forEach(e => { const f = String(e.registrado || ''); if (f > d && ajeno(e.registrado_por)) L.push({f, id: e.id_paciente, t: '⚠️ ' + e.tipo + ' ' + dm(e.fecha), q: e.registrado_por, al: true}); });
+    (DB.CANDIDATOS || []).forEach(c => { if ((c.creado || '') > d && c.estado === 'por revisar') L.push({f: c.creado, id: '', t: 'candidato nuevo desde la VGI: ' + (c.iniciales || '') + (c.edad ? ', ' + c.edad + ' años' : ''), q: ''}); });
+    const vis = {};
+    return L.filter(x => { const k = x.id + '|' + x.t; if (vis[k]) return false; vis[k] = 1; return true; }).sort((a, b) => a.f < b.f ? 1 : -1);
+  }
+  window.vigiaVisto = () => { try { localStorage.setItem(kv(), ahora()); } catch (e) {} render(); };
+  function bloque() {
+    const L = novedades(), d = leer();
+    const tit = '<div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">Novedades ' + (L.length ? '<span class="chip c-hoy">' + L.length + '</span>' : '') + '</h3>' +
+      (L.length ? '<button class="btn sm sec" onclick="vigiaVisto()">Marcar como visto</button>' : '') + '</div>' +
+      '<p class="note" style="margin:2px 0 8px">' + (d ? 'Desde tu última visita (' + fh(d) + ')' : 'Últimos 2 días') + '. Lo que se registra aquí ya lo ve todo el equipo: no hace falta avisarlo por WhatsApp.</p>';
+    if (!L.length) return '<div class="card">' + tit + '<div class="note">Nada nuevo.</div></div>';
+    // un renglón por paciente: lo urgente primero, luego lo más reciente (máximo 3 cosas por paciente)
+    const G = {}, orden = [];
+    L.forEach(x => { const k = x.id || ('c' + x.f); if (!G[k]) { G[k] = []; orden.push(k); } G[k].push(x); });
+    const item = x => (x.al ? '<span style="color:var(--red);font-weight:600">' + esc(x.t) + '</span>' : esc(x.t));
+    return '<div class="card">' + tit + '<div class="lista">' + orden.slice(0, 10).map(k => { const g = G[k].slice().sort((a, b) => (b.al ? 1 : 0) - (a.al ? 1 : 0)), x = G[k][0];
+      return '<div class="li"' + (x.id ? ' style="cursor:pointer" onclick="ir(\'caso\',' + js(x.id) + ')"' : '') + '><div class="tx"><b>' + (x.id ? nm(x.id) : 'Candidato') + '</b> · ' + g.slice(0, 3).map(item).join(' · ') +
+        (g.length > 3 ? ' <span class="note">(+' + (g.length - 3) + ')</span>' : '') + '<div class="t3">' + fh(x.f) + (x.q ? ' · ' + esc(x.q) : '') + '</div></div></div>'; }).join('') +
+      (orden.length > 10 ? '<div class="note">… y ' + (orden.length - 10) + ' pacientes más</div>' : '') + '</div></div>';
+  }
+  window.vigiaNovedades = novedades;
+  const pr = window.__panelRender;
+  if (typeof pr === 'function') window.__panelRender = function () { pr.apply(this, arguments); try { $('#app').insertAdjacentHTML('afterbegin', '<section class="psec">' + bloque() + '</section>'); } catch (e) { console.warn('novedades', e); } };
+  // al guardar: recordar que el equipo ya lo ve en el portal
+  const g0 = guardar;
+  guardar = function (ops, msg) { return g0.call(this, ops, msg ? msg + ' · el equipo ya lo ve en Novedades' : msg); };
+  window.guardar = guardar;
+  if (typeof DB !== 'undefined' && DB && VISTA === 'panel') render();
 })();
 </script>
 </body>
