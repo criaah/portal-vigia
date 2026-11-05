@@ -6745,7 +6745,13 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 (function () {
   const ORDEN = ['ingreso', 'prealta', 'a1', 'llamadas', 'cierre'];
   const CORTO = {ingreso: 'Ingreso', prealta: 'Prealta', a1: 'Atención 1', llamadas: 'Llamadas', cierre: 'Cierre'};
-  const ST = {nov: false, bus: false, q: '', et: ''};
+  const ST = {nov: false, bus: false, q: '', et: '', ver: (() => { try { return localStorage.getItem('vg-ver') || 'todos'; } catch (e) { return 'todos'; } })()};
+  // filtro: Mías (lo que me toca en la fase actual), Mi rol (las etapas de mi rol) o Todos; queda guardado en este dispositivo
+  const YO = () => (typeof AUTH !== 'undefined' && AUTH.nombre) || '';
+  const ETAPAS_ROL = {revision: ['ingreso', 'prealta', 'cierre'], hospitalario: ['prealta', 'a1'], gestion: ['llamadas', 'cierre']};
+  const rolYo = () => { try { return typeof vigiaRolTag === 'function' && YO() ? vigiaRolTag(YO()) : ''; } catch (e) { return ''; } };
+  const aCargoAhora = p => (deAlta(p) || POST_ALTA.includes(p.estado)) ? p.gestor : p.titular;
+  const pasaVer = f => ST.ver === 'mias' ? !!YO() && aCargoAhora(f.p) === YO() : ST.ver === 'rol' ? (ETAPAS_ROL[rolYo()] ? ETAPAS_ROL[rolYo()].includes(f.k) : true) : true;
   const proxDe = p => pasosSimple(p).find(x => x.t.estado === 'pendiente' && !bloqueada(p, x.t));
   const urg = t => { if (!t || !t.fecha_debida) return 3; const d = dif(t.fecha_debida, hoy()); return d < 0 ? 0 : d <= 1 ? 1 : 2; };
   const URG_COL = ['#B3261E', '#B7791F', '#8A96A3', '#8A96A3'];
@@ -6756,7 +6762,8 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     nov: () => { ST.nov = !ST.nov; render(); },
     bus: () => { ST.bus = !ST.bus; if (!ST.bus) ST.q = ''; render(); setTimeout(() => { const i = $('#v27q'); if (i) i.focus(); }, 0); },
     q: v => { ST.q = v; render(); setTimeout(() => { const i = $('#v27q'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 0); },
-    et: k => { ST.et = ST.et === k ? '' : k; render(); }
+    et: k => { ST.et = ST.et === k ? '' : k; render(); },
+    ver: k => { ST.ver = k; try { localStorage.setItem('vg-ver', k); } catch (e) {} render(); }
   };
   function extras() { // revisión de ingresos del día y avisos del QR: se toman de la vista Hoy de siempre
     try { const d = document.createElement('div'); d.innerHTML = vHoy();
@@ -6764,12 +6771,14 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   }
   function vInicio() {
     const enc = DB.PACIENTES.filter(enCurso);
-    const filas = enc.map(p => { const x = proxDe(p); return {p, x, k: x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros', u: x ? urg(x.t) : 3}; });
+    const filas = enc.map(p => { const x = proxDe(p); return {p, x, k: x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros', u: x ? urg(x.t) : 3}; }).filter(pasaVer);
     const cuenta = k => filas.filter(f => f.k === k).length;
     const nov = typeof vigiaNovedades === 'function' ? vigiaNovedades().length : 0;
     let h = '<div class="v27-top"><h2 style="margin:0">Hoy</h2><div class="row" style="gap:8px">' +
       '<button class="v27-ico' + (ST.nov ? ' on' : '') + '" onclick="v27.nov()" title="Novedades">🔔' + (nov ? '<span class="v27-n">' + nov + '</span>' : '') + '</button>' +
       '<button class="v27-ico' + (ST.bus ? ' on' : '') + '" onclick="v27.bus()" title="Buscar">🔍</button></div></div>';
+    h += '<div class="seg" style="margin:0 0 10px">' + [['mias', 'Mías'], ['rol', 'Mi rol'], ['todos', 'Todos']].map(([k, l]) => '<button class="' + (ST.ver === k ? 'on' : '') + '" onclick="v27.ver(\'' + k + '\')">' + l + '</button>').join('') + '</div>';
+    if (ST.ver !== 'todos' && !YO()) h += '<div class="card note">Para ver lo suyo, elija su nombre en «Más» → «¿Quién eres?».</div>';
     if (ST.bus) h += '<input id="v27q" placeholder="Nombre, RUT o cama" value="' + esc(ST.q) + '" oninput="v27.q(this.value)" style="margin:0 0 10px">';
     if (ST.nov && typeof vigiaNovBloque === 'function') h += vigiaNovBloque();
     h += extras();
@@ -6778,7 +6787,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     let L = filas.filter(f => (!ST.et || f.k === ST.et) && (!ST.q || texto(f.p).includes(sinTildes(ST.q).toLowerCase())));
     const fd = f => (f.x && f.x.t.fecha_debida) || '9';
     L.sort((a, b) => (a.u - b.u) || (fd(a) < fd(b) ? -1 : fd(a) > fd(b) ? 1 : 0));
-    if (!L.length) return h + '<div class="card note">' + (ST.q || ST.et ? 'Nadie con este filtro.' : 'No hay pacientes en curso.') + '</div>';
+    if (!L.length) return h + '<div class="card note">' + (ST.q || ST.et || ST.ver !== 'todos' ? 'Nadie con este filtro.' : 'No hay pacientes en curso.') + '</div>';
     h += L.map(({p, x, k, u}) => {
       const cuando = x && x.t.fecha_debida ? (u === 0 ? 'vencida ' + dm(x.t.fecha_debida) : x.t.fecha_debida === hoy() ? 'hoy' : u === 1 ? 'mañana' : dm(x.t.fecha_debida)) : '';
       return '<div class="v27-c" style="border-left-color:' + ETAPA_COLOR[k] + '" onclick="ir(\'caso\',' + js(p.id) + ')"><i class="v27-u" style="background:' + URG_COL[u] + '"></i><div class="tx"><div class="t1">' + rotulo(p) + '</div>' +
