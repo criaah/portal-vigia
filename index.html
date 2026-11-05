@@ -6897,6 +6897,82 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   if (typeof DB !== 'undefined' && DB) render();
 })();
 </script>
+<script>
+// ============================================================ v28 · 05-nov-2026 · presentación breve «cómo queda el portal» (reunión 05-11) y acceso desde «Más»
+(function () {
+  const C = k => ETAPA_COLOR[k], F = k => ETAPA_FONDO[k];
+  const paso = (k, t, q, extra) => '<div class="v28-p" style="--c:' + C(k) + ';--f:' + F(k) + '"><i></i><b>' + t + '</b><span>' + q + '</span>' + (extra ? '<em>' + extra + '</em>' : '') + '</div>';
+  const fila = (antes, ahora) => '<tr><td>' + antes + '</td><td style="font-size:22px;text-align:center">→</td><td><b>' + ahora + '</b></td></tr>';
+  diapositivas = function () {
+    const url = urlPortal();
+    const enc = (DB.PACIENTES || []).filter(enCurso);
+    const cuenta = k => enc.filter(p => { const x = pasosSimple(p).find(s => s.t.estado === 'pendiente' && !bloqueada(p, s.t)); return x && ETAPA_NODO[x.nodo] === k; }).length;
+    const ej = enc.find(p => deAlta(p)) || enc[0];
+    return [
+      () => '<h2>VIGÍA · cómo queda el portal</h2><p class="sub">Reunión del equipo · ' + fcl(hoy()) + '</p>' +
+        '<div class="row" style="gap:26px;align-items:center;margin-top:10px"><div class="qrp">' + (url ? qrSvg(url + '?v=presentacion') : '') + '</div><div>' +
+        '<p><b>1.</b> Escanee el código con la cámara.</p><p><b>2.</b> Toque <b>«¿Quién eres?»</b> y elija su nombre.</p><p><b>3.</b> Deje marcado <b>«Seguir al presentador»</b>.</p></div></div>',
+      () => '<h2>El flujo en una línea</h2><div class="v28-flujo">' +
+        paso('ingreso', 'Ingreso', 'Revisión de ficha', 'UGA · Coordinación') +
+        paso('prealta', 'Prealta', '¿Entra?', 'UGA · Coordinación') +
+        paso('a1', 'Atención 1', 'Educación y teach-back', 'ADG · Equipo VIGÍA') +
+        paso('llamadas', 'Llamadas', '48 h · d7 · d14 · d21', 'Gestión de Casos') +
+        paso('cierre', '30 días', 'Revisión de ficha', 'Coordinación') + '</div>' +
+        '<div class="v28-alta"><b>El alta, en la ficha del paciente</b><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:6px">' +
+        '<span class="chip c-hoy">alta prob. 10-11</span><span>→ se hace la Atención 1 → llegada la fecha queda</span><span class="chip c-ok">de alta</span><span>→ parten las llamadas</span></div>' +
+        '<div class="note" style="margin-top:6px">¿No se fue? <b>Suspender</b> · ¿Cambió el día? <b>Cambiar</b>. Lo ve todo el equipo al instante.</div></div>',
+      () => '<h2>Inicio: ¿qué me toca hoy?</h2><div class="v28-dos"><div>' +
+        '<div class="v28-mini"><span class="v28-b">🔔<sup>3</sup></span><span class="v28-b">🔍</span><span class="v28-seg"><b>Mías</b>|Mi rol|Todos</span></div>' +
+        '<div class="v27-emb" style="pointer-events:none">' + ['ingreso', 'prealta', 'a1', 'llamadas', 'cierre'].map(k => '<button style="--c:' + C(k) + ';--f:' + F(k) + '"><b>' + cuenta(k) + '</b><span>' + ({ingreso: 'Ingreso', prealta: 'Prealta', a1: 'Atención 1', llamadas: 'Llamadas', cierre: 'Cierre'})[k] + '</span></button>').join('') + '</div>' +
+        '<div class="v28-c" style="border-left-color:' + C('llamadas') + '"><i style="background:#B3261E"></i>Rosa <span class="note">(ex 12) · día 3</span><br><b style="color:' + C('llamadas') + '">Llamada 48–96 h</b> <span style="color:#B3261E;font-weight:700">· vencida</span></div>' +
+        '<div class="v28-c" style="border-left-color:' + C('prealta') + '"><i style="background:#B7791F"></i>🛏️ 12 · Marta<br><b style="color:' + C('prealta') + '">Prealta: ¿entra?</b> <span class="note">· hoy</span></div></div>' +
+        '<ul class="v28-l"><li><b>🔔 Novedades</b>: lo que hicieron los demás desde tu última visita.</li><li><b>Mías · Mi rol · Todos</b>: elige qué ver.</li><li><b>Embudo</b>: cuántos hay en cada etapa; tócalo para filtrar.</li><li><b>Una sola lista</b>: 🔴 vencido · 🟡 hoy o mañana · ⚪ después.</li><li>En la lista: <b>cama y primer nombre</b>. El resto, al abrir.</li></ul></div>' +
+        '<div class="row" style="margin-top:10px">' + btnIr('panel', 'Abrir Inicio') + '</div>',
+      () => '<h2>Ficha: ¿qué hago con este paciente?</h2><div class="v28-dos"><div>' +
+        '<div class="v27-tl" style="pointer-events:none">' + [['ingreso', 'Ingreso', 'h'], ['prealta', 'Prealta', 'h'], ['a1', 'A1', 'h'], ['llamadas', '48 h', 'now'], ['llamadas', 'd7', 'p'], ['llamadas', 'd14', 'p'], ['llamadas', 'd21', 'p'], ['cierre', '30 d', 'p']]
+          .map(([k, t, e]) => '<button class="v27-d ' + e + '" style="--c:' + C(k) + '"><i></i><b>' + t + '</b><span></span></button>').join('') + '</div>' +
+        '<div class="card ahora row" style="margin-top:12px;justify-content:space-between;align-items:center"><div><div class="note"><b>AHORA</b></div><b>Llamada 48–96 h</b> <span class="chip c-hoy">hoy</span></div><span class="btn sm">Registrar</span></div>' +
+        '<div class="card"><div class="note"><b>PARA LA LLAMADA</b></div>📞 Ana (esposa) <b style="color:var(--teal,#1B7A86)">9 1234 5678</b><ul class="v27-ojo"><li>⚖️ Peso diario: +2 kg en 3 días = alerta</li><li>🫁 Completar antibiótico</li></ul></div></div>' +
+        '<ul class="v28-l"><li><b>Puntos</b>: lo hecho, lo de ahora y lo que viene. Rojo = vencido.</li><li><b>AHORA</b>: un botón para registrar.</li><li><b>Para la llamada</b>: el teléfono se marca con un toque; las alertas salen del resumen de alta.</li><li><b>⋯ Más</b>: imprimir, QR, urgencia, a cargo, corregir RUT.</li><li><b>Copiar síntesis</b> para pegar en la ficha clínica.</li></ul></div>' +
+        '<div class="row" style="margin-top:10px">' + (ej ? '<button class="btn sec" onclick="DESDE_PRES=true;ir(\'caso\',' + js(ej.id) + ')">Abrir un paciente</button>' : '') + '</div>',
+      () => '<h2>Lo de los pacientes ya no necesita WhatsApp</h2><table class="v28-t">' +
+        fila('«Probable alta hoy…»', 'Alta probable / Suspender, en la ficha') +
+        fila('La ficha del paciente por el chat', 'Se abre en el portal') +
+        fila('«¿Qué pacientes agregaron?»', '🔔 Novedades') +
+        fila('«Ojo con esta llamada»', 'Aparece en rojo en Novedades') +
+        fila('«No tengo el link»', 'Portal instalado en la pantalla de inicio') + '</table>' +
+        '<p class="sub" style="margin-top:10px">El grupo de WhatsApp sigue para coordinarnos como equipo.</p>',
+      () => '<h2>Acordemos hoy</h2><div class="cols">' +
+        [['GC', '1 · El alta', '¿Quién marca alta probable o la suspende? ¿Gestión de Casos, UGA o ambos?'],
+          ['VIG', '2 · Las llamadas', 'Quién llama en cada momento (48 h, d7, d14, d21) y quién reemplaza.'],
+          ['ENF', '3 · Un solo link', 'Instalar el portal en el teléfono hoy, cada uno con su nombre en «¿Quién eres?».'],
+          ['COORD', '4 · Revisión semanal', '15 minutos fijos: qué día y a qué hora.']]
+          .map(([k, t, d]) => '<div class="caja" style="border-top-color:var(--' + k + ')"><b>' + t + '</b><span>' + d + '</span></div>').join('') + '</div>'
+    ];
+  };
+  // en la vista simple la presentación también se puede abrir (el render de base la redirigía a Hoy)
+  const r0 = render;
+  render = function () { if (VISTA === 'presentacion' && DB) { nav(); $('#app').innerHTML = vPresentacion(); return; } return r0.apply(this, arguments); };
+  // «Presentación» en el menú Más
+  const mm0 = menuMas;
+  menuMas = function () {
+    mm0.apply(this, arguments);
+    try { const m = $('#mbox .menu-mas'); if (m && ![...m.querySelectorAll('button')].some(b => /Presentación/.test(b.textContent)))
+      m.insertAdjacentHTML('afterbegin', '<button class="btn sec" onclick="cerrar();DIAPO=0;ir(\'presentacion\')">Presentación</button>'); } catch (e) {}
+  };
+  const st = document.createElement('style');
+  st.textContent = '.v28-flujo{display:flex;gap:6px;margin:16px 0}.v28-p{flex:1;background:var(--f);border-top:6px solid var(--c);border-radius:10px;padding:10px 8px;display:flex;flex-direction:column;gap:3px;min-width:0}' +
+    '.v28-p b{color:var(--c);font-size:18px}.v28-p span{font-size:14px}.v28-p em{font-style:normal;font-size:12px;color:var(--gray)}.v28-p i{display:none}' +
+    '.v28-alta{border:1px dashed var(--line);border-radius:12px;padding:12px;margin-top:10px}' +
+    '.v28-dos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}.v28-l{margin:0;padding-left:20px;font-size:17px;line-height:1.5}.v28-l li{margin:6px 0}' +
+    '.v28-mini{display:flex;gap:8px;align-items:center;margin-bottom:8px}.v28-b{border:1px solid var(--line);border-radius:10px;padding:6px 9px;background:#fff;position:relative}.v28-b sup{background:#B3261E;color:#fff;border-radius:99px;padding:0 5px;font-size:10px}' +
+    '.v28-seg{border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px;color:var(--gray)}.v28-seg b{color:#1B7A86}' +
+    '.v28-c{position:relative;background:#fff;border:1px solid var(--line);border-left:6px solid;border-radius:10px;padding:8px 10px 8px 26px;margin:6px 0;font-size:14px}.v28-c i{position:absolute;left:9px;top:14px;width:9px;height:9px;border-radius:50%}' +
+    '.v28-t{width:100%;border-collapse:collapse;font-size:18px}.v28-t td{padding:10px 8px;border-bottom:1px solid var(--line)}.v28-t td:first-child{color:var(--gray)}' +
+    '@media (max-width:760px){.v28-flujo{flex-direction:column}.v28-dos{grid-template-columns:1fr}.v28-t{font-size:15px}.v28-l{font-size:15px}}';
+  document.head.appendChild(st);
+})();
+</script>
 </body>
 
 </html>
