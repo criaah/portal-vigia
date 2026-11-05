@@ -6172,6 +6172,13 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
 // Deje el mouse quieto sobre el logo unos segundos (o mantenga el dedo apretado en el teléfono) y aparece Vigi con un mensaje.
 (function () {
   const yt = q => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+  // v33 · en la red MINSAL YouTube está bloqueado: antes de ofrecer el enlace se prueba si el sitio carga en este equipo.
+  // Si no carga (o no responde en 4 s), Vigi sugiere la canción o el video para buscarlo en el teléfono, sin enlace.
+  let YT_OK = null;
+  try { const im = new Image(), t = setTimeout(() => { if (YT_OK === null) YT_OK = false; }, 4000);
+    im.onload = () => { clearTimeout(t); YT_OK = true; }; im.onerror = () => { clearTimeout(t); YT_OK = false; };
+    im.src = 'https://www.youtube.com/favicon.ico?v=' + Date.now(); } catch (e) { YT_OK = false; }
+  const queDe = u => { try { return decodeURIComponent(String(u).split('search_query=')[1] || '').replace(/\+/g, ' '); } catch (e) { return ''; } };
   const M = [
     {t: 'Hola, soy Vigi 🦉. Vigilo de noche para que nadie vuelva al hospital sin necesidad. El objetivo de VIGÍA es simple: menos rehospitalizaciones y más días en casa.'},
     {t: 'Cada llamada que hacen es un hilo que sostiene a alguien en su casa. Hoy, ese hilo puede ser el que importa.'},
@@ -6246,7 +6253,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     '#vigi:before{content:"";position:absolute;left:22px;top:-9px;width:16px;height:16px;background:#fff;transform:rotate(45deg);border-left:2px solid #E8EEF5;border-top:2px solid #E8EEF5}' +
     '#vigi .vg-b{flex:none;animation:vgFlota 3s ease-in-out infinite}#vigi .vg-par{animation:vgParpa 4.2s infinite}#vigi .vg-cab{transition:transform .25s ease-out}#vigi .vg-b svg{transform-origin:50% 90%;transition:transform .3s ease-out}#vigi:not(.sigue) .vg-cab{animation:vgCab 6s ease-in-out infinite}' +
     '#vigi .vg-n{font-size:12px;font-weight:700;color:#1B7A86;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}#vigi .vg-t{font-size:14.5px;line-height:1.45}' +
-    '#vigi .vg-acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#vigi a.vg-l{background:#1B7A86;color:#fff;text-decoration:none;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600}' +
+    '#vigi .vg-tel{font-size:13px;background:#E6F4F1;color:#0E2A47;border-radius:8px;padding:6px 10px}#vigi .vg-acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#vigi a.vg-l{background:#1B7A86;color:#fff;text-decoration:none;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600}' +
     '#vigi button{background:#EEF2F5;color:#0E2A47;border:0;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer}#vigi .vg-x{position:absolute;right:6px;top:4px;background:none;font-size:18px;color:#5B6470;padding:2px 6px}' +
     '@keyframes vgIn{0%{opacity:0;transform:translateY(-10px) scale(.85)}100%{opacity:1;transform:none}}@keyframes vgFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}' +
     '@keyframes vgParpa{0%,92%,100%{height:0}95%{height:36px}}@keyframes vgCab{0%,40%,100%{transform:none}50%,65%{transform:translateX(7px)}78%,90%{transform:translateX(-7px)}}' +
@@ -6259,7 +6266,8 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     let el = document.getElementById('vigi');
     if (!el) { el = document.createElement('div'); el.id = 'vigi'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Vigi, el búho VIGÍA'); document.body.appendChild(el); }
     el.innerHTML = '<div class="vg-b">' + OWL + '</div><div><div class="vg-n">Vigi · el búho VIGÍA</div><div class="vg-t">' + esc(m.t) + '</div><div class="vg-acc">' +
-      (m.u ? '<a class="vg-l" href="' + m.u + '" target="_blank" rel="noopener">' + esc(m.l) + ' ↗</a>' : '') + '<button type="button" id="vg-otro">Otro mensaje</button></div></div>' +
+      (m.u ? (YT_OK === true ? '<a class="vg-l" href="' + m.u + '" target="_blank" rel="noopener">' + esc(m.l) + ' ↗</a>'
+        : '<span class="vg-tel">' + (/^Escuchar/.test(m.l || '') ? '🎧' : '📺') + ' En su teléfono, busque: <b>' + esc(queDe(m.u)) + '</b></span>') : '') + '<button type="button" id="vg-otro">Otro mensaje</button></div></div>' +
       '<button type="button" class="vg-x" aria-label="Cerrar">×</button>';
     try { const r = document.getElementById('logoBtn').getBoundingClientRect(); el.style.top = Math.max(8, r.bottom + 12) + 'px'; el.style.left = Math.max(8, r.left - 6) + 'px'; } catch (e) {}
     el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
