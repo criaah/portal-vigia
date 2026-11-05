@@ -3551,8 +3551,8 @@ function bloqueAlta(p) {
   if (!enCurso(p) || deAlta(p)) return '';
   const jid = js(p.id);
   return '<div class="row" style="gap:8px;margin:2px 0 10px">' + (p.fecha_alta ? chipAlta(p) : '<span class="note">sin fecha de alta</span>') +
-    '<button class="btn sm sec" onclick="altaProbable(' + jid + ')">' + (p.fecha_alta ? 'Cambiar fecha de alta' : 'Alta probable…') + '</button>' +
-    (p.fecha_alta ? '<button class="btn sm sec" onclick="altaSuspendida(' + jid + ')">Alta suspendida</button>' : '') + '</div>';
+    '<button class="btn sm sec" onclick="altaProbable(' + jid + ')">' + (p.fecha_alta ? 'Cambiar' : 'Alta probable…') + '</button>' +
+    (p.fecha_alta ? '<button class="btn sm sec" onclick="altaSuspendida(' + jid + ')">Suspender</button>' : '') + '</div>';
 }
 function altaProbable(id) {
   const p = pac(id); if (!p) return;
@@ -5580,6 +5580,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
   window.agSem = d => { AG_SEM = d === 0 ? 0 : AG_SEM + d; render(); };
   const lunesDe = iso => { const d = Dd(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; };
   const rolDe = n => { const e = (DB.EQUIPO || []).find(x => x.persona === n); return e && e.rol ? e.rol : ''; };
+  window.__vAgenda = () => vAgenda();
   function vAgenda() {
     const d0 = hoy(), l0 = lunesDe(d0); l0.setDate(l0.getDate() + 7 * AG_SEM);
     const dias = [...Array(7)].map((_, i) => { const d = new Date(l0); d.setDate(d.getDate() + i); return isoD(d); }), M = tareasPersona(dias[0], dias[6]);
@@ -6727,6 +6728,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
       (orden.length > 10 ? '<div class="note">… y ' + (orden.length - 10) + ' pacientes más</div>' : '') + '</div></div>';
   }
   window.vigiaNovedades = novedades;
+  window.vigiaNovBloque = bloque;
   const pr = window.__panelRender;
   if (typeof pr === 'function') window.__panelRender = function () { pr.apply(this, arguments); try { $('#app').insertAdjacentHTML('afterbegin', '<section class="psec">' + bloque() + '</section>'); } catch (e) { console.warn('novedades', e); } };
   // al guardar: recordar que el equipo ya lo ve en el portal
@@ -6734,6 +6736,156 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   guardar = function (ops, msg) { return g0.call(this, ops, msg ? msg + ' · el equipo ya lo ve en Novedades' : msg); };
   window.guardar = guardar;
   if (typeof DB !== 'undefined' && DB && VISTA === 'panel') render();
+})();
+</script>
+<script>
+// ============================================================ v27 · 05-nov-2026 · más simple y visual: Inicio = «¿qué me toca hoy?», ficha = «¿qué hago con este paciente?»
+// Inicio: campana de Novedades, 🔍, embudo por etapa (filtra) y una sola lista ordenada por urgencia. «Semana del equipo» pasa a «Más».
+// Ficha: línea de tiempo de puntos, AHORA, datos para llamar con el «Ojo en la llamada» del resumen de alta, acciones en «Más» e historial plegado.
+(function () {
+  const ORDEN = ['ingreso', 'prealta', 'a1', 'llamadas', 'cierre'];
+  const CORTO = {ingreso: 'Ingreso', prealta: 'Prealta', a1: 'Atención 1', llamadas: 'Llamadas', cierre: 'Cierre'};
+  const ST = {nov: false, bus: false, q: '', et: ''};
+  const proxDe = p => pasosSimple(p).find(x => x.t.estado === 'pendiente' && !bloqueada(p, x.t));
+  const urg = t => { if (!t || !t.fecha_debida) return 3; const d = dif(t.fecha_debida, hoy()); return d < 0 ? 0 : d <= 1 ? 1 : 2; };
+  const URG_COL = ['#B3261E', '#B7791F', '#8A96A3', '#8A96A3'];
+  const texto = p => { const x = IDENT[p.id] || {}; return sinTildes([p.id, x.nombre, x.rut, p.unidad].join(' ')).toLowerCase(); };
+
+  // ---------------------------------------------------- Inicio
+  window.v27 = {
+    nov: () => { ST.nov = !ST.nov; render(); },
+    bus: () => { ST.bus = !ST.bus; if (!ST.bus) ST.q = ''; render(); setTimeout(() => { const i = $('#v27q'); if (i) i.focus(); }, 0); },
+    q: v => { ST.q = v; render(); setTimeout(() => { const i = $('#v27q'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 0); },
+    et: k => { ST.et = ST.et === k ? '' : k; render(); }
+  };
+  function extras() { // revisión de ingresos del día y avisos del QR: se toman de la vista Hoy de siempre
+    try { const d = document.createElement('div'); d.innerHTML = vHoy();
+      return [...d.children].filter(x => /Hoy toca revisar ingresos|Avisos de consulta/.test(x.textContent)).map(x => x.outerHTML).join(''); } catch (e) { return ''; }
+  }
+  function vInicio() {
+    const enc = DB.PACIENTES.filter(enCurso);
+    const filas = enc.map(p => { const x = proxDe(p); return {p, x, k: x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros', u: x ? urg(x.t) : 3}; });
+    const cuenta = k => filas.filter(f => f.k === k).length;
+    const nov = typeof vigiaNovedades === 'function' ? vigiaNovedades().length : 0;
+    let h = '<div class="v27-top"><h2 style="margin:0">Hoy</h2><div class="row" style="gap:8px">' +
+      '<button class="v27-ico' + (ST.nov ? ' on' : '') + '" onclick="v27.nov()" title="Novedades">🔔' + (nov ? '<span class="v27-n">' + nov + '</span>' : '') + '</button>' +
+      '<button class="v27-ico' + (ST.bus ? ' on' : '') + '" onclick="v27.bus()" title="Buscar">🔍</button></div></div>';
+    if (ST.bus) h += '<input id="v27q" placeholder="Nombre, RUT o cama" value="' + esc(ST.q) + '" oninput="v27.q(this.value)" style="margin:0 0 10px">';
+    if (ST.nov && typeof vigiaNovBloque === 'function') h += vigiaNovBloque();
+    h += extras();
+    h += candidatos().map(tarjetaCandidato).join('');
+    h += '<div class="v27-emb">' + ORDEN.map(k => '<button class="' + (ST.et === k ? 'on' : '') + '" style="--c:' + ETAPA_COLOR[k] + ';--f:' + ETAPA_FONDO[k] + '" onclick="v27.et(\'' + k + '\')"><b>' + cuenta(k) + '</b><span>' + CORTO[k] + '</span></button>').join('') + '</div>';
+    let L = filas.filter(f => (!ST.et || f.k === ST.et) && (!ST.q || texto(f.p).includes(sinTildes(ST.q).toLowerCase())));
+    const fd = f => (f.x && f.x.t.fecha_debida) || '9';
+    L.sort((a, b) => (a.u - b.u) || (fd(a) < fd(b) ? -1 : fd(a) > fd(b) ? 1 : 0));
+    if (!L.length) return h + '<div class="card note">' + (ST.q || ST.et ? 'Nadie con este filtro.' : 'No hay pacientes en curso.') + '</div>';
+    h += L.map(({p, x, k, u}) => {
+      const cuando = x && x.t.fecha_debida ? (u === 0 ? 'vencida ' + dm(x.t.fecha_debida) : x.t.fecha_debida === hoy() ? 'hoy' : u === 1 ? 'mañana' : dm(x.t.fecha_debida)) : '';
+      return '<div class="v27-c" style="border-left-color:' + ETAPA_COLOR[k] + '" onclick="ir(\'caso\',' + js(p.id) + ')"><i class="v27-u" style="background:' + URG_COL[u] + '"></i><div class="tx"><div class="t1">' + rotulo(p) + '</div>' +
+        '<div class="t2">' + (x ? '<b style="color:' + ETAPA_COLOR[k] + '">' + esc(x.nombre.replace(/ antes del alta$/, '').replace(/^Revisión prealta: /, 'Prealta: ')) + '</b>' : '<span class="note">sin pasos pendientes</span>') +
+        (cuando ? ' <span class="note" style="color:' + URG_COL[u] + ';font-weight:' + (u < 2 ? 700 : 400) + '">· ' + cuando + '</span>' : '') + (estadoAlta(p) === 'probable' ? ' <span class="note">· alta prob. ' + dm(p.fecha_alta) + '</span>' : '') + '</div></div>' +
+        '<div class="fin">' + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : '') + '</div></div>';
+    }).join('');
+    return h;
+  }
+  window.__panelRender = () => { const y = window.scrollY; nav(); $('#app').innerHTML = vInicio(); window.scrollTo(0, y); };
+
+  // ---------------------------------------------------- Semana del equipo, ahora en «Más»
+  const r0 = render;
+  render = function () {
+    if (VISTA === 'semana' && DB && typeof window.__vAgenda === 'function') { nav(); $('#app').innerHTML = '<a href="javascript:void 0" onclick="ir(\'panel\')">← inicio</a><h2>Semana del equipo</h2>' + window.__vAgenda(); return; }
+    return r0.apply(this, arguments);
+  };
+  const mm0 = menuMas;
+  menuMas = function () {
+    mm0.apply(this, arguments);
+    try { const m = $('#mbox .menu-mas'); if (!m) return; [...m.querySelectorAll('button')].filter(b => /Agenda del equipo|Semana del equipo/.test(b.textContent)).forEach(b => b.remove());
+      m.insertAdjacentHTML('afterbegin', '<button class="btn sec" onclick="cerrar();ir(\'semana\')">Semana del equipo</button>'); } catch (e) {}
+  };
+
+  // ---------------------------------------------------- ficha del paciente
+  const OJO = {};
+  function ojoDe(id) {
+    if (OJO[id]) return OJO[id];
+    OJO[id] = {cargando: true};
+    srv('api_alta', 'ver', id, null, typeof claveRutVigia === 'function' ? claveRutVigia() : '').then(A => {
+      A = A || {}; const resu = typeof ojoResueltos === 'function' ? ojoResueltos(id) : [];
+      OJO[id] = {ojo: String(A.ojo || '').split('\n').map(x => x.trim()).filter(Boolean).filter(x => !resu.includes(x)), tel2: A.contacto_tel2 || '', A};
+      if (VISTA === 'caso' && CASO === id) render();
+    }, () => { OJO[id] = {ojo: []}; });
+    return OJO[id];
+  }
+  const corto = x => x.nodo === 'T1' ? 'Ingreso' : x.nodo === 'T4' || x.nodo === 'G1' ? 'Prealta' : x.nodo === 'T6' ? 'A1' : x.nodo === 'T22' ? '30 d' :
+    x.hito === '72h' ? '48 h' : x.hito ? x.hito.replace('d', 'd') : x.nombre;
+  function linea(p, prox) {
+    const L = pasosSimple(p);
+    return '<div class="v27-tl">' + L.map(x => { const t = x.t, k = ETAPA_NODO[x.nodo] || 'otros', c = ETAPA_COLOR[k];
+      const es = t.estado === 'hecha' ? 'h' : t.estado === 'no aplica' ? 'na' : prox && prox.t === t ? 'now' : 'p';
+      const venc = t.estado === 'pendiente' && t.fecha_debida && t.fecha_debida < hoy() && !bloqueada(p, t);
+      const f = t.estado === 'hecha' ? dm(t.fecha_hecha) : t.estado === 'no aplica' ? '—' : t.fecha_debida ? dm(t.fecha_debida) : '';
+      return '<button class="v27-d ' + es + (venc ? ' venc' : '') + '" style="--c:' + c + '" onclick="abrirTarea(' + js(p.id) + ',' + js(t.n) + ',' + js(x.hito) + ')" title="' + esc(x.nombre) + '"><i></i><b>' + esc(corto(x)) + '</b><span>' + f + '</span></button>'; }).join('') + '</div>';
+  }
+  function vFicha(p) {
+    const jid = js(p.id), I = IDENT[p.id] || {}, prox = proxDe(p), alta = deAlta(p);
+    const avQR = (DB.AVISOS || []).filter(a => a.id_paciente === p.id && /nuevo|pendiente/.test(a.estado || 'nuevo')).length;
+    let h = '<a href="javascript:void 0" onclick="ir(\'panel\')">← inicio</a>';
+    h += '<div class="row" style="justify-content:space-between;align-items:flex-start;margin-top:4px"><div><h2 style="margin:0">' + esc(I.nombre || p.id) + '</h2>' +
+      '<div class="note">' + [I.rut ? '<b>' + esc(I.rut) + '</b>' : '<a href="javascript:void 0" onclick="verRut(' + jid + ')">registrar RUT</a>',
+        alta ? (p.unidad ? 'ex cama ' + esc(camaCorta(p)) : '') + (p.fecha_alta ? ' · día ' + Math.max(0, dif(hoy(), p.fecha_alta)) + ' post-alta' : '') : '🛏️ ' + esc(p.unidad ? camaTxt(p) : 'sin cama'),
+        enCurso(p) ? '' : esc(p.estado)].filter(Boolean).join(' · ') + '</div></div>' +
+      '<div>' + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : '') + '</div></div>';
+    if (avQR) h += '<div class="alert" style="margin-top:8px">⚠️ Tiene avisos de consulta (QR) sin gestionar.</div>';
+    h += bloqueAlta(p);
+    h += linea(p, prox);
+    h += '<div class="card ahora" style="margin-top:10px">' + (prox ? '<div class="row" style="justify-content:space-between;align-items:center"><div><div class="note"><b>AHORA</b></div><b style="font-size:17px">' + esc(prox.nombre) + '</b> ' + chip(estadoTarea(prox.t)) +
+      '<div class="t3">' + esc(RESP_SIMPLE[prox.nodo] || '') + '</div></div><button class="btn" onclick="abrirTarea(' + jid + ',' + js(prox.t.n) + ',' + js(prox.hito) + ')">Registrar</button></div>' : '<b>Sin pasos pendientes.</b>') + '</div>';
+    // para llamar: solo cuando ya corresponde llamar
+    if (alta || (prox && prox.nodo === 'T12')) {
+      const c = CONTACTO[p.id] || {}, O = ojoDe(p.id), tels = [c.tel, O.tel2].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+      h += '<div class="card"><div class="note"><b>PARA LA LLAMADA</b></div>' +
+        (tels.length ? tels.map(t => '<div style="margin:4px 0">📞 ' + esc([c.nombre, c.parentesco ? '(' + c.parentesco + ')' : ''].filter(Boolean).join(' ')) + ' <a class="v27-tel" href="tel:' + esc(String(t).replace(/[^\d+]/g, '')) + '">' + esc(t) + '</a></div>').join('')
+          : '<div class="note">Falta el teléfono: <a href="javascript:void 0" onclick="abrirAlta(' + jid + ')">completar en el resumen de alta</a></div>') +
+        (c.comunicacion ? '<div class="t3">' + esc(c.comunicacion) + '</div>' : '') +
+        (O.cargando ? '<div class="note">Cargando alertas…</div>' : (O.ojo || []).length ? '<ul class="v27-ojo">' + O.ojo.slice(0, 4).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' + (O.ojo.length > 4 ? '<div class="note">+' + (O.ojo.length - 4) + ' más en la síntesis</div>' : '') : '') +
+        '</div>';
+    }
+    // síntesis completa (para pegar en la ficha clínica)
+    h += '<details class="card"><summary><b>Síntesis para la ficha</b> <span class="note">· copiar y pegar</span></summary><pre id="sintxt" style="white-space:pre-wrap;font:13px/1.45 system-ui,sans-serif;margin:10px 0">' + esc(typeof vigiaSintesis === 'function' ? vigiaSintesis(p) : '') + '</pre></details>' +
+      '<div class="row" style="gap:8px;margin:0 0 10px"><button class="btn sec" onclick="copiarSintesis()">Copiar síntesis</button></div>';
+    // el resto, en un solo menú
+    const b = (t, f) => '<button class="btn sec" onclick="' + f + '">' + t + '</button>';
+    h += '<details class="card v27-mas"><summary><b>⋯ Más acciones</b></summary><div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">' +
+      b('Llamada extra o entrante', 'abrirEval(\'LL_S\',' + jid + ',\'\')') + b('Hospitalización o urgencia', 'registrarEvento(' + jid + ')') +
+      b('Resumen de alta', 'abrirAlta(' + jid + ')') + b('Imprimir plan', 'vigiaImp.plan(' + jid + ')') + b('Imprimir carnet', 'vigiaImp.carnet(' + jid + ')') +
+      b('QR de avisos', 'qrAviso(' + jid + ')') + b('Quién está a cargo', 'asignarPaciente(' + jid + ')') + b('Corregir nombre y RUT', 'verRut(' + jid + ')') + '</div></details>';
+    // historial: solo pasos principales, llamadas y eventos
+    const H = [];
+    pasosSimple(p).filter(x => x.t.estado === 'hecha').forEach(x => H.push({f: x.t.fecha_hecha || '', t: x.nombre, d: x.t.hecho_por}));
+    DB.CONTACTOS.filter(c => c.id_paciente === p.id).forEach(c => H.push({f: String(c.fecha_real || c.registrado || ''), t: 'Llamada ' + hitoTxt(c.hito) + ' · ' + (c.resultado || ''), d: [c.salida, c.registrado_por].filter(Boolean).join(' · ')}));
+    DB.EVENTOS.filter(e => e.id_paciente === p.id).forEach(e => H.push({f: e.fecha || '', t: '⚠️ ' + e.tipo, d: [e.clasificacion, e.fuente].filter(Boolean).join(' · ')}));
+    H.sort((a, b) => a.f < b.f ? 1 : -1);
+    h += '<details class="card"><summary><b>Historial</b> <span class="note">· ' + H.length + '</span></summary>' + (H.length ? '<div class="lista">' + H.map(x => '<div class="li"><div class="tx"><b>' + dm(String(x.f).slice(0, 10)) + '</b> · ' + esc(x.t) + (x.d ? '<div class="t3">' + esc(x.d) + '</div>' : '') + '</div></div>').join('') + '</div>' : '<div class="note">Aún no hay registros.</div>') + '</details>';
+    return h;
+  }
+  vCasoSimple = vFicha;
+  window.vCasoSimple = vFicha;
+
+  const st = document.createElement('style');
+  st.textContent = '.v27-top{display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px}' +
+    '.v27-ico{position:relative;border:1px solid var(--line);background:#fff;border-radius:12px;width:44px;height:44px;font-size:19px;cursor:pointer}.v27-ico.on{background:#E6F4F1;border-color:#1B7A86}' +
+    '.v27-n{position:absolute;top:-6px;right:-6px;background:#B3261E;color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:1px 6px}' +
+    '.v27-emb{display:flex;gap:4px;margin:12px 0}.v27-emb button{flex:1;border:0;border-radius:10px;background:var(--f);color:var(--c);padding:8px 2px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;font:inherit;outline:2px solid transparent}' +
+    '.v27-emb button b{font-size:20px;line-height:1}.v27-emb button span{font-size:11px;font-weight:600}.v27-emb button.on{outline-color:var(--c)}' +
+    '.v27-c{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-left:6px solid;border-radius:12px;padding:10px 12px;margin:0 0 8px;cursor:pointer}' +
+    '.v27-c .tx{flex:1;min-width:0}.v27-c .t1{font-weight:700}.v27-c .t2{font-size:14px;margin-top:2px}.v27-u{width:10px;height:10px;border-radius:50%;flex:none}' +
+    '.v27-tl{display:flex;justify-content:space-between;position:relative;margin:14px 0 4px;padding:0 2px}.v27-tl:before{content:"";position:absolute;left:12px;right:12px;top:11px;height:2px;background:var(--line)}' +
+    '.v27-d{position:relative;border:0;background:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;flex:1;min-width:0;font:inherit}' +
+    '.v27-d i{width:18px;height:18px;border-radius:50%;border:3px solid var(--c);background:#fff;box-sizing:border-box;z-index:1}' +
+    '.v27-d.h i{background:var(--c)}.v27-d.na i{border-color:#C9D1D9;background:#EEF1F4}.v27-d.now i{width:24px;height:24px;margin-top:-3px;box-shadow:0 0 0 4px #fff,0 0 0 6px var(--c)}' +
+    '.v27-d.venc i{border-color:#B3261E}.v27-d.venc.now i{box-shadow:0 0 0 4px #fff,0 0 0 6px #B3261E}.v27-d b{font-size:11px;color:var(--ink,#0E2A47);white-space:nowrap}.v27-d span{font-size:10px;color:var(--gray)}.v27-d.venc span{color:#B3261E;font-weight:700}' +
+    '.v27-tel{font-weight:700;font-size:17px}.v27-ojo{margin:6px 0 0;padding-left:18px}.v27-ojo li{margin:2px 0}.v27-mas summary,details.card summary{cursor:pointer}';
+  document.head.appendChild(st);
+  if (typeof DB !== 'undefined' && DB) render();
 })();
 </script>
 </body>
