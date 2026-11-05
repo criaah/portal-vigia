@@ -6973,6 +6973,67 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   document.head.appendChild(st);
 })();
 </script>
+<script>
+// ============================================================ v29 · 05-nov-2026 · Pendientes: los problemas de coherencia, en una línea cada uno
+// No repite tareas (esas están en la lista de Hoy): solo lo que está mal o falta para poder seguir. Se calcula en el dispositivo.
+(function () {
+  const nm = p => { const x = IDENT[p.id] || {}; return '<b>' + esc(p.id) + '</b> ' + esc(String(x.nombre || '').split(' ').slice(0, 2).join(' ')); };
+  const nodo = t => (P(t.n) || {}).id_nodo;
+  const tareasDe = id => DB.TAREAS.filter(t => t.id_paciente === id);
+  function pendientes() {
+    if (!DB) return [];
+    const L = [], H = hoy();
+    const enc = DB.PACIENTES.filter(enCurso);
+    enc.forEach(p => {
+      const T = tareasDe(p.id), hecho = n => T.some(t => nodo(t) === n && t.estado === 'hecha');
+      const prealta = hecho('T4') || hecho('G1'), a1 = hecho('T6'), alta = deAlta(p);
+      if (p.fecha_alta && p.fecha_ingreso && p.fecha_alta < p.fecha_ingreso)
+        L.push({p, g: 0, t: 'fecha de alta (' + dm(p.fecha_alta) + ') anterior al ingreso (' + dm(p.fecha_ingreso) + ')', a: 'corregir en Prealta'});
+      else if (!alta && p.fecha_alta && dif(H, p.fecha_alta) >= 1 && !a1)
+        L.push({p, g: 0, t: 'alta probable ' + dm(p.fecha_alta) + ' ya pasó' + (prealta ? '' : ' y sin prealta'), a: 'confirmar en TrakCare: alta real o nueva fecha'});
+      else if (!alta && !prealta && p.fecha_ingreso && dif(H, p.fecha_ingreso) >= 14)
+        L.push({p, g: 2, t: dif(H, p.fecha_ingreso) + ' días hospitalizado sin prealta', a: 'confirmar si sigue hospitalizado'});
+      if (alta || POST_ALTA.includes(p.estado)) {
+        const c = CONTACTO[p.id] || {};
+        if (!c.tel) L.push({p, g: 1, t: 'de alta sin teléfono', a: 'completar el resumen de alta'});
+        const venc = T.filter(t => nodo(t) === 'T12' && t.estado === 'pendiente' && t.fecha_debida && dif(H, t.fecha_debida) >= 2).length;
+        if (venc) L.push({p, g: 1, t: venc + (venc > 1 ? ' llamadas vencidas' : ' llamada vencida') + ' hace 2 días o más', a: 'llamar o registrar «no contesta»'});
+      }
+      if (!p.unidad && !alta) L.push({p, g: 2, t: 'sin unidad ni cama', a: 'completar con TrakCare'});
+    });
+    // mismo RUT en dos VG
+    const porRut = {};
+    DB.PACIENTES.forEach(p => { const r = String((IDENT[p.id] || {}).rut || '').replace(/[^\dkK]/g, '').toUpperCase(); if (r) (porRut[r] = porRut[r] || []).push(p); });
+    Object.values(porRut).filter(a => a.length > 1).forEach(a => L.push({p: a[0], g: 0, t: 'mismo RUT en ' + a.map(x => x.id).join(' y '), a: 'dejar uno solo'}));
+    return L.sort((a, b) => a.g - b.g);
+  }
+  const COL = ['#B3261E', '#B7791F', '#5B6B7A'];
+  function bloque() {
+    const L = pendientes();
+    if (!L.length) return '';
+    const fila = x => '<div class="li" style="cursor:pointer;border-left:4px solid ' + COL[x.g] + ';padding-left:8px" onclick="ir(\'caso\',' + js(x.p.id) + ')"><div class="tx">' + nm(x.p) + ' · ' + esc(x.t) + ' <span class="note">→ ' + esc(x.a) + '</span></div></div>';
+    const ver = L.slice(0, 6), resto = L.slice(6);
+    return '<div class="card" style="border-color:#E8B4B0"><h3 style="margin:0 0 6px">Pendientes <span class="chip c-venc">' + L.length + '</span></h3>' +
+      '<div class="lista">' + ver.map(fila).join('') + '</div>' +
+      (resto.length ? '<details><summary class="note">' + resto.length + ' más</summary><div class="lista">' + resto.map(fila).join('') + '</div></details>' : '') + '</div>';
+  }
+  window.vigiaPendientes = pendientes;
+  const pr = window.__panelRender;
+  if (typeof pr === 'function') window.__panelRender = function () {
+    pr.apply(this, arguments);
+    try { const b = bloque(); if (!b) return; const top = $('#app .v27-top'); (top ? top.nextElementSibling : null) ? top.nextElementSibling.insertAdjacentHTML('afterend', b) : $('#app').insertAdjacentHTML('afterbegin', b); } catch (e) { console.warn('pendientes', e); }
+  };
+  // no guardar una fecha de alta anterior al ingreso
+  const g0 = guardar;
+  guardar = function (ops, msg) {
+    const malo = (ops || []).find(o => o.tabla === 'PACIENTES' && o.registro && o.registro.fecha_alta && (() => { const p = pac(o.registro.id) || {}; const fi = o.registro.fecha_ingreso || p.fecha_ingreso; return fi && o.registro.fecha_alta < fi; })());
+    if (malo) { toast('No se guardó: la fecha de alta (' + dm(malo.registro.fecha_alta) + ') es anterior al ingreso. Revise día y mes.', 8000); return Promise.reject(new Error('fecha de alta anterior al ingreso')); }
+    return g0.apply(this, arguments);
+  };
+  window.guardar = guardar;
+  if (typeof DB !== 'undefined' && DB && VISTA === 'panel') render();
+})();
+</script>
 </body>
 
 </html>
