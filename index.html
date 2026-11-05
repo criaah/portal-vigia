@@ -3143,6 +3143,7 @@ function valorInicial(c, sv, p) {
   if (c.k === 'fecha_real') return ahora();
   if (c.k === 'fecha_alta' && p) return p.fecha_alta || '';
   if (c.k === 'qr_url' && p) return p.carpeta_url || '';
+  if (c.k === 'sigue_nofarm' && sv && sv.r_nofarm) return sv.r_nofarm === 'Sí' ? 'No' : 'Sí'; // v34 · llamadas registradas antes del cambio
   return ''; // sin valores por defecto: si no hay información, el campo queda en blanco
 }
 function campoEv(c, v) {
@@ -3165,6 +3166,7 @@ function leerEv(ev) {
     const el = document.getElementById('e_' + c.k); if (!el) return;
     o[c.k] = c.t === 'multi' ? [...el.querySelectorAll('input:checked')].map(x => x.value).join(';') : el.value.trim();
   });
+  if ('sigue_nofarm' in o) o.r_nofarm = o.sigue_nofarm === 'No' ? 'Sí' : o.sigue_nofarm === 'Sí' ? 'No' : ''; // v34 · la alerta sigue leyendo r_nofarm
   return o;
 }
 const irpTxt = x => ({I: 'comprende al primer intento', R: 'comprende tras refuerzo', P: 'pendiente', NA: 'no aplica'})[String(x).split(' ')[0]] || x;
@@ -3204,10 +3206,11 @@ function notaEval(ev, v, hito) {
   try { const es = enSuma(ev, v); if (es.length) { L.push('', 'EN SUMA:'); es.forEach(x => L.push('- ' + x)); } } catch (e) {}
   ev.secciones.forEach(s => {
     const lines = [], si = [], no = [];
-    const nsino = s.campos.filter(c => c.t === 'sino' && c.nota !== false).length;
+    const nsino = s.campos.filter(c => c.t === 'sino' && c.nota !== false && !c.aparte).length;
     s.campos.forEach(c => {
       if (c.nota === false || c.guardar === false || c.k === 'fecha_real') return;
       const x = v[c.k];
+      if (c.t === 'sino' && c.aparte) { if (x) lines.push(c.l.replace(/[¿?]/g, '') + ': ' + x); return; }
       if (c.t === 'sino') { if (nsino > 2) (x === 'Sí' ? si : no).push(c.l); else lines.push(c.l + ': ' + (x || 'No')); return; }
       if (x == null || x === '') return;
       if (c.t === 'irp') lines.push(c.l + ': ' + irpTxt(x));
@@ -3275,12 +3278,21 @@ function actualizarEval() {
   $('#evtxt').textContent = txt;
   if (ev.id === 'CARNET') pintarCarnetPrev(p, v);
 }
-function copiarNota() {
-  const t = $('#evtxt').textContent;
-  const ok = () => toast('Texto copiado. Péguelo en la ficha clínica.');
-  const viejo = () => { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); ok(); } catch (e) { toast('No se pudo copiar: seleccione el texto y cópielo a mano.'); } a.remove(); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, viejo); else viejo();
+// v34 · acta 05-11: al pegar en TrakCare el texto quedaba en una sola línea. Se copia con saltos de Windows (CRLF) y además como HTML con <br>,
+// para que respete las líneas tanto un cuadro de texto simple como un editor con formato.
+function copiarTexto(t, msg) {
+  const lineas = String(t || '').split(/\r?\n/), crlf = lineas.join('\r\n');
+  const html = '<div style="font-family:Arial,sans-serif;font-size:12px">' + lineas.map(l => l ? esc(l) : '&nbsp;').join('<br>') + '</div>';
+  const ok = () => toast(msg || 'Texto copiado.');
+  const viejo = () => { const a = document.createElement('textarea'); a.value = crlf; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); ok(); } catch (e) { toast('No se pudo copiar: seleccione el texto y cópielo a mano.'); } a.remove(); };
+  const plano = () => navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(crlf).then(ok, viejo) : viejo();
+  try {
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)
+      return navigator.clipboard.write([new ClipboardItem({'text/plain': new Blob([crlf], {type: 'text/plain'}), 'text/html': new Blob([html], {type: 'text/html'})})]).then(ok, plano);
+  } catch (e) {}
+  plano();
 }
+function copiarNota() { copiarTexto($('#evtxt').textContent, 'Texto copiado. Péguelo en la ficha clínica.'); }
 function guardarEval() {
   const ev = EVS[EV.evId], p = pac(EV.id), v = leerEv(ev);
   document.querySelectorAll('#evform .err').forEach(x => x.classList.remove('err'));
@@ -3312,7 +3324,7 @@ function guardarLlamada(p, hito, d) {
   const fallidos = DB.CONTACTOS.filter(c => c.id_paciente === p.id && c.hito === (hito || 'extra') && c.resultado === 'fallido').length;
   const ops = [], ic = nuevoId('LL');
   const extra = {}; Object.keys(d).filter(k => /^com_/.test(k)).forEach(k => { if (d[k]) extra[k] = d[k]; });
-  ['alarma_grave', 'asistio', 'reagendada', 'proxima_recordada', 'modulo', 'hallazgos', 'pregunta', 'urgencia', 'rehosp', 'r_medicamentos', 'r_controles', 'r_sintomas', 'r_nofarm', 'r_teachback', 'tb_correccion', 'interlocutor_nombre', 'fecha_urgencia', 'fecha_rehosp', 'urg_lugar', 'urg_detalle', 'rehosp_lugar', 'rehosp_detalle', 'rehosp_estado', 'fecha_alta_rehosp'].forEach(k => { if (d[k]) extra[k] = d[k]; });
+  ['alarma_grave', 'asistio', 'reagendada', 'proxima_recordada', 'modulo', 'hallazgos', 'pregunta', 'urgencia', 'rehosp', 'r_medicamentos', 'r_controles', 'r_sintomas', 'r_nofarm', 'sigue_nofarm', 'r_teachback', 'tb_correccion', 'interlocutor_nombre', 'fecha_urgencia', 'fecha_rehosp', 'urg_lugar', 'urg_detalle', 'rehosp_lugar', 'rehosp_detalle', 'rehosp_estado', 'fecha_alta_rehosp'].forEach(k => { if (d[k]) extra[k] = d[k]; });
   ops.push({tabla: 'CONTACTOS', registro: {id_contacto: ic, id_paciente: p.id, hito: hito || 'extra', fecha_prevista: t ? t.fecha_debida : '', fecha_real: d.fecha_real, intento: fallidos + 1, resultado: d.resultado,
     sentido: 'saliente', modalidad: d.modalidad, estamento: 'enfermería', quien: d.quien, interlocutor: d.interlocutor, minutos: d.minutos,
     tb_medicamentos: d.tb_medicamentos, tb_alarmas: d.tb_alarmas, tb_controles: d.tb_controles, tb_alimentacion: d.tb_alimentacion, tb_carnet: d.tb_carnet,
@@ -3423,7 +3435,7 @@ const SIMPLE = () => !COMPLETA && String((DB && DB.cfg && DB.cfg.modo_simple) ||
 const VISIBLES_SIMPLE = ['T1', 'T4', 'T6', 'T12', 'T22'];
 const enSimple = n => VISIBLES_SIMPLE.includes(P(n).id_nodo);
 function alternarVista() { COMPLETA = !COMPLETA; try { localStorage.setItem('vigia_completa', COMPLETA ? '1' : '0'); } catch (e) {} cerrar(); VISTA = SIMPLE() ? 'hoy' : 'inicio'; render(); window.scrollTo(0, 0); }
-const NOMBRE_SIMPLE = {T1: 'Revisión de ficha al ingreso', T4: 'Revisión prealta: ¿entra?', G1: 'Revisión prealta: ¿entra?', T6: 'Atención 1 antes del alta', T12: 'Llamada', T21: 'Cierre día 21', T22: 'Revisión a 30 días'};
+const NOMBRE_SIMPLE = {T1: 'Revisión de ficha al ingreso', T4: 'Alta indicada: ¿entra?', G1: 'Alta indicada: ¿entra?', T6: 'Atención 1 antes del alta', T12: 'Llamada', T21: 'Cierre día 21', T22: 'Revisión a 30 días'};
 const RESP_SIMPLE = {T1: 'Enfermería UGA o Coordinación VIGÍA', T4: 'Enfermería UGA o Coordinación VIGÍA', G1: 'Enfermería UGA o Coordinación VIGÍA', T6: 'ADG, Equipo VIGÍA o Coordinación VIGÍA', T12: 'Gestión de Casos', T21: 'Gestión de Casos', T22: 'Coordinación VIGÍA'};
 RESP_SIMPLE.T4 = RESP_SIMPLE.G1 = 'ADG · Equipo VIGÍA'; // v31 · la prealta la hace el equipo VIGÍA de ADG
 const CONDUCTAS = ['sin problema nuevo', 'descompensación → médico post-alta telefónico', 'descompensación → interconsulta a UGA', 'control en APS o consultorio', 'signo de gravedad → urgencia o SAMU'];
@@ -3460,7 +3472,7 @@ EVS.LL_S = {id: 'LL_S', codigo: 'F3', nodo: 'T12', nombre: 'Llamada de seguimien
       {k: 'tb_controles', l: '2. Controles · teach-back', t: 'irp', ops: IRP, guia: '¿Cuáles son sus próximos controles y exámenes: cuándo, dónde y cómo llegará?'},
       {k: 'r_controles', l: 'Controles de especialidad o APS sin agendar', t: 'sino'},
       {k: 'tb_alimentacion', l: '3. Indicaciones no farmacológicas · teach-back', t: 'irp', ops: IRP, guia: '¿Cómo está haciendo la alimentación, la movilidad y los cuidados indicados, y quién lo ayuda?'},
-      {k: 'r_nofarm', l: 'No sigue las indicaciones no farmacológicas', t: 'sino'},
+      {k: 'sigue_nofarm', l: '¿Sigue las indicaciones no farmacológicas?', t: 'sino', aparte: true, guia: '«No» queda como problema y alerta, igual que antes.'}, // v34 · acta 05-11: sin el «no»
       {k: 'tb_correccion', l: 'Qué se corrigió y qué queda pendiente (quién lo resuelve)', t: 'area', guia: 'Obligatorio si algún dominio queda en R o P. Una discrepancia de prescripción se devuelve al profesional de la UGA: no improvisar dosis ni horarios.'},
       {k: 'r_sintomas', l: 'Síntomas de descompensación', t: 'sino', guia: 'Según su enfermedad: más cansancio, ahogo, hinchazón de tobillos, fiebre, confusión.'}]},
     {t: 'III. DESDE EL ALTA O EL ÚLTIMO CONTACTO', guia: 'Si hubo urgencia u hospitalización, escriba lo que cuenta el paciente o el cuidador: queda en el registro de eventos del estudio y en la síntesis del caso.', campos: [
@@ -3532,7 +3544,7 @@ function bloqueada(p, t) {
 function pasosSimple(p) {
   const L = [];
   const fila = (nodo, hito, nombre) => { const t = tareaN(p.id, nodo, hito); if (!t) return; L.push({t, nombre, nodo, hito}); };
-  fila('T1', '', 'Revisión de ficha al ingreso'); fila('T4', '', 'Revisión prealta: ¿entra?'); fila('T6', '', 'Atención 1 antes del alta');
+  fila('T1', '', 'Revisión de ficha al ingreso'); fila('T4', '', 'Alta indicada: ¿entra?'); fila('T6', '', 'Atención 1 antes del alta');
   HITOS.forEach(([k, l]) => fila('T12', k, 'Llamada ' + l)); fila('T22', '', 'Revisión a 30 días');
   return L;
 }
@@ -3744,7 +3756,8 @@ function pendientes(todas) {
   return L.sort((a, b) => a.fecha < b.fecha ? -1 : 1);
 }
 // en la vista simple, Hoy se ordena por paso del proceso (no por profesión): lo que importa es en qué paso está cada paciente
-const ETAPAS = [['ingreso', 'Ingreso y revisión'], ['prealta', 'Prealta'], ['a1', 'Atención 1'], ['llamadas', 'Llamadas'], ['cierre', 'Cierre 30 días'], ['otros', 'Otros']];
+const ETAPAS = [['ingreso', 'Candidatos (hospitalizados)'], ['prealta', 'Alta indicada: ¿entra?'], // v34 · acta 05-11: hospitalizado = candidato hasta que se indica el alta
+  ['a1', 'Atención 1'], ['llamadas', 'Llamadas'], ['cierre', 'Cierre 30 días'], ['otros', 'Otros']];
 const ETAPA_NODO = {T1: 'ingreso', T4: 'prealta', G1: 'prealta', T6: 'a1', T12: 'llamadas', T21: 'cierre', T22: 'cierre'};
 const etapaDeItem = x => (x.f && ETAPA_NODO[x.f.id_nodo]) || 'otros';
 // un color por paso del proceso, igual en Hoy, Pacientes y Tablero
@@ -5041,9 +5054,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
       '<button class="btn sm sec" onclick="copiarSintesis()">Copiar síntesis</button></details>';
   }
   window.copiarSintesis = () => {
-    const t = ($('#sintxt') || {}).textContent || '';
-    const ok = () => toast('Síntesis copiada.');
-    try { navigator.clipboard.writeText(t).then(ok, () => { const r = document.createRange(); r.selectNodeContents($('#sintxt')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Seleccionada: cópiela con el menú.'); }); } catch (e) {}
+    copiarTexto(($('#sintxt') || {}).textContent || '', 'Síntesis copiada.'); // v34 · con saltos de línea
   };
   window.vigiaSintesis = sintesis;
   const ve0 = vEval;
@@ -6795,7 +6806,8 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 // Ficha: línea de tiempo de puntos, AHORA, datos para llamar con el «Ojo en la llamada» del resumen de alta, acciones en «Más» e historial plegado.
 (function () {
   const ORDEN = ['ingreso', 'prealta', 'a1', 'llamadas', 'cierre'];
-  const CORTO = {ingreso: 'Ingreso', prealta: 'Prealta', a1: 'Atención 1', llamadas: 'Llamadas', cierre: 'Cierre'};
+  const CORTO = {ingreso: 'Candidatos', prealta: 'Alta: ¿entra?', // v34
+    a1: 'Atención 1', llamadas: 'Llamadas', cierre: 'Cierre'};
   const ST = {nov: false, bus: false, q: '', et: '', ver: (() => { try { return localStorage.getItem('vg-ver') || 'todos'; } catch (e) { return 'todos'; } })()};
   // filtro: Mías (lo que me toca en la fase actual), Mi rol (las etapas de mi rol) o Todos; queda guardado en este dispositivo
   const YO = () => (typeof AUTH !== 'undefined' && AUTH.nombre) || '';
@@ -6824,7 +6836,8 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     const enc = DB.PACIENTES.filter(enCurso);
     const filas = enc.map(p => { const x = proxDe(p), av = avisada(p);
       const ua = av ? (p.fecha_alta < hoy() ? 0 : p.fecha_alta <= sumar(hoy(), 1) ? 1 : 2) : 3;
-      return {p, x, av, k: x ? (ETAPA_NODO[x.nodo] || 'otros') : 'otros', u: Math.min(x ? urg(x.t) : 3, ua, porAsignarGC(p) ? 1 : 3)}; }).filter(pasaVer);
+      return {p, x, av, k: x ? ((ETAPA_NODO[x.nodo] === 'prealta' && !p.fecha_alta) ? 'ingreso' : (ETAPA_NODO[x.nodo] || 'otros')) : 'otros', // v34 · sin alta indicada sigue siendo candidato
+        u: Math.min(x ? urg(x.t) : 3, ua, porAsignarGC(p) ? 1 : 3)}; }).filter(pasaVer);
     const cuenta = k => filas.filter(f => f.k === k).length;
     const nov = typeof vigiaNovedades === 'function' ? vigiaNovedades().length : 0;
     let h = '<div class="v27-top"><h2 style="margin:0">Hoy</h2><div class="row" style="gap:8px">' +
@@ -6846,7 +6859,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
       const cuando = x && x.t.fecha_debida ? (u === 0 ? 'vencida ' + dm(x.t.fecha_debida) : x.t.fecha_debida === hoy() ? 'hoy' : u === 1 ? 'mañana' : dm(x.t.fecha_debida)) : '';
       return '<div class="v27-c" style="border-left-color:' + ETAPA_COLOR[k] + '" onclick="ir(\'caso\',' + js(p.id) + ')"><i class="v27-u" style="background:' + URG_COL[u] + '"></i><div class="tx"><div class="t1">' + rotulo(p) + '</div>' +
         (av ? lineaAviso(p, u) : '') + (porAsignarGC(p) ? lineaGC(p) : '') +
-        '<div class="t2">' + (x ? '<b style="color:' + ETAPA_COLOR[k] + '">' + esc(x.nombre.replace(/ antes del alta$/, '').replace(/^Revisión prealta: /, 'Prealta: ')) + '</b>' : '<span class="note">sin pasos pendientes</span>') +
+        '<div class="t2">' + (x ? '<b style="color:' + ETAPA_COLOR[k] + '">' + esc(x.nodo === 'T4' && !p.fecha_alta ? 'Candidato · espera la indicación de alta' : x.nombre.replace(/ antes del alta$/, '').replace(/^Revisión prealta: /, 'Prealta: ')) + '</b>' : '<span class="note">sin pasos pendientes</span>') +
         (cuando ? ' <span class="note" style="color:' + URG_COL[u] + ';font-weight:' + (u < 2 ? 700 : 400) + '">· ' + cuando + '</span>' : '') + '</div></div>' +
         '<div class="fin">' + (porAsignarGC(p) && esGC() ? '<button class="btn sm" onclick="event.stopPropagation();asignarGC(' + js(p.id) + ')">Asignar</button> ' : '') + (av && esCoord() ? '<button class="btn sm' + (p.titular ? ' sec' : '') + '" onclick="event.stopPropagation();asignarAlta(' + js(p.id) + ')">' + (p.titular ? 'Cambiar' : 'Asignar') + '</button> ' : '') + (!deAlta(p) && !p.fecha_alta ? '<button class="btn sm sec" title="Avisar que se va de alta" onclick="event.stopPropagation();altaProbable(' + js(p.id) + ')">🏠 Alta</button> ' : '') + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : '') + '</div></div>';
     }).join('');
@@ -6879,7 +6892,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     }, () => { OJO[id] = {ojo: []}; });
     return OJO[id];
   }
-  const corto = x => x.nodo === 'T1' ? 'Ingreso' : x.nodo === 'T4' || x.nodo === 'G1' ? 'Prealta' : x.nodo === 'T6' ? 'A1' : x.nodo === 'T22' ? '30 d' :
+  const corto = x => x.nodo === 'T1' ? 'Ingreso' : x.nodo === 'T4' || x.nodo === 'G1' ? '¿Entra?' : x.nodo === 'T6' ? 'A1' : x.nodo === 'T22' ? '30 d' :
     x.hito === '72h' ? '48 h' : x.hito ? x.hito.replace('d', 'd') : x.nombre;
   function linea(p, prox) {
     const L = pasosSimple(p);
@@ -6907,8 +6920,8 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
       '<div class="t3">Con el folleto, revisar la epicrisis con el paciente y quien lo cuida (prealta y Atención 1).</div>' +
       '<div class="row" style="gap:8px;margin-top:8px"><button class="btn" onclick="abrirAlta(' + jid + ')">Folleto y epicrisis</button>' + (tareaN(p.id, 'T6') ? '<button class="btn sec" onclick="abrirTarea(' + jid + ',' + js(tareaN(p.id, 'T6').n) + ',\'\')">Atención 1</button>' : '') + '</div></div>';
     h += linea(p, prox);
-    h += '<div class="card ahora" style="margin-top:10px">' + (prox ? '<div class="row" style="justify-content:space-between;align-items:center"><div><div class="note"><b>AHORA</b></div><b style="font-size:17px">' + esc(prox.nombre) + '</b> ' + chip(estadoTarea(prox.t)) +
-      '<div class="t3">' + esc(RESP_SIMPLE[prox.nodo] || '') + '</div></div><button class="btn" onclick="abrirTarea(' + jid + ',' + js(prox.t.n) + ',' + js(prox.hito) + ')">Registrar</button></div>' : '<b>Sin pasos pendientes.</b>') + '</div>';
+    h += '<div class="card ahora" style="margin-top:10px">' + (prox ? '<div class="row" style="justify-content:space-between;align-items:center"><div><div class="note"><b>AHORA</b></div><b style="font-size:17px">' + esc(prox.nodo === 'T4' && !p.fecha_alta ? 'Candidato · espera la indicación de alta' : prox.nombre) + '</b> ' + (prox.nodo === 'T4' && !p.fecha_alta ? '' : chip(estadoTarea(prox.t))) + // v34
+      '<div class="t3">' + esc(prox.nodo === 'T4' && !p.fecha_alta ? 'Cuando se indique el alta: «✓ Se va de alta» y se revisa si entra' : RESP_SIMPLE[prox.nodo] || '') + '</div></div><button class="btn" onclick="abrirTarea(' + jid + ',' + js(prox.t.n) + ',' + js(prox.hito) + ')">Registrar</button></div>' : '<b>Sin pasos pendientes.</b>') + '</div>';
     // para llamar: solo cuando ya corresponde llamar
     if (alta || (prox && prox.nodo === 'T12')) {
       const c = CONTACTO[p.id] || {}, O = ojoDe(p.id), tels = [c.tel, O.tel2].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
@@ -6974,8 +6987,8 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
         '<div class="row" style="gap:26px;align-items:center;margin-top:10px"><div class="qrp">' + (url ? qrSvg(url + '?v=presentacion') : '') + '</div><div>' +
         '<p><b>1.</b> Escanee el código con la cámara.</p><p><b>2.</b> Toque <b>«¿Quién eres?»</b> y elija su nombre.</p><p><b>3.</b> Deje marcado <b>«Seguir al presentador»</b>.</p></div></div>',
       () => '<h2>El flujo en una línea</h2><div class="v28-flujo">' +
-        paso('ingreso', 'Ingreso', 'Revisión de ficha', 'UGA · Coordinación') +
-        paso('prealta', 'Prealta', '¿Entra?', 'ADG · Equipo VIGÍA') +
+        paso('ingreso', 'Candidato', 'Revisión de ficha · hospitalizado', 'UGA · Coordinación') +
+        paso('prealta', 'Alta indicada', '¿Entra? (sin HOSDOM ni paliativos)', 'Coordinación') +
         paso('a1', 'Atención 1', 'Educación y teach-back', 'ADG · Equipo VIGÍA') +
         paso('llamadas', 'Llamadas', '48 h · d7 · d14 · d21', 'Gestión de Casos') +
         paso('cierre', '30 días', 'Revisión de ficha', 'Coordinación') + '</div>' +
@@ -7109,6 +7122,84 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     return r;
   };
   window.cargar = cargar;
+})();
+</script>
+<script>
+// ============================================================ v34 · 05-nov-2026 · acuerdos de la reunión del 05-11
+// Prueba del 9 y 10-nov por WhatsApp: el portal escribe el mensaje del día para el grupo, en vez de pedir que se llene algo más.
+// Borrón y cuenta nueva: se archivan (no se borran) los hospitalizados que egresaron sin entrar al piloto.
+(function () {
+  const T = h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.trim(); };
+  const nom = p => T(nomLista(p)), cama = p => p.unidad ? camaCorta(p) : 'sin cama';
+  const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const hosp = p => enCurso(p) && !deAlta(p) && ((tareaN(p.id, 'T6') || {}).estado !== 'hecha');
+  const cuando = f => f === hoy() ? 'hoy' : f === sumar(hoy(), 1) ? 'mañana' : dm(f);
+  function mensajeDia() {
+    const H = hoy(), enc = (DB.PACIENTES || []).filter(enCurso);
+    const nuevos = enc.filter(p => hosp(p) && String(p.creado || '').slice(0, 10) === H);
+    const altas = enc.filter(p => hosp(p) && p.fecha_alta && p.fecha_alta <= sumar(H, 1)).sort((a, b) => a.fecha_alta < b.fecha_alta ? -1 : 1);
+    const llamar = enc.filter(p => typeof porAsignarGC === 'function' && porAsignarGC(p));
+    const d = new Date(H + 'T12:00:00');
+    const L = ['*VIGÍA · ' + DIAS[d.getDay()] + ' ' + dm(H) + '*'];
+    L.push('', '*Candidatos agregados hoy (' + nuevos.length + ')*');
+    nuevos.length ? nuevos.forEach(p => L.push('• ' + nom(p) + ' – cama ' + cama(p))) : L.push('• ninguno');
+    L.push('', '*Altas indicadas hoy y mañana (' + altas.length + ')*');
+    altas.length ? altas.forEach(p => L.push('• ' + nom(p) + ' – cama ' + cama(p) + ' – alta ' + cuando(p.fecha_alta) + ' – ' + (p.titular ? 'va ' + nomC2(p.titular) : 'por asignar quién va'))) : L.push('• ninguna');
+    if (llamar.length) { L.push('', '*Pasan a llamadas, por asignar quién llama (' + llamar.length + ')*'); llamar.forEach(p => L.push('• ' + nom(p))); }
+    return L.join('\n');
+  }
+  window.v34mensajeTexto = mensajeDia;
+  window.v34mensaje = () => {
+    const t = mensajeDia();
+    modal('<h2>Mensaje del día para el grupo</h2><p class="note" style="margin-top:0">Sale de lo registrado en el portal. Revíselo antes de enviarlo.</p>' +
+      '<pre id="v34msg" style="white-space:pre-wrap;font:14px/1.45 system-ui,sans-serif;background:#F6F8FA;border-radius:10px;padding:10px;margin:8px 0">' + esc(t) + '</pre>' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" onclick="copiarTexto($(\'#v34msg\').textContent,\'Mensaje copiado: péguelo en el grupo.\')">Copiar</button>' +
+      '<button class="btn sec" onclick="window.open(\'https://wa.me/?text=\'+encodeURIComponent($(\'#v34msg\').textContent),\'_blank\')">Abrir WhatsApp</button>' +
+      '<button class="btn sec" onclick="cerrar()">Cerrar</button></div>');
+  };
+  // ------------------------------------------------ egresó sin entrar: se archiva (estado «no activado») y sus tareas quedan «no aplica»
+  // solo columnas que ya existen: el motivo queda en «datos» de las tareas que pasan a «no aplica»
+  const opsArchivar = (p, motivo) => [{tabla: 'PACIENTES', registro: {id: p.id, estado: 'no activado', fecha_cierre: hoy(), actualizado: ahora()}}]
+    .concat(opsNoAplica(p, 0).map(o => (o.registro.datos = {motivo: motivo, archivado_por: nombreUsuario()}, o)));
+  window.v34egreso = id => {
+    const p = pac(id); if (!p) return;
+    modal('<h2>¿Ya no está hospitalizado?</h2><p class="note" style="margin-top:0">' + nomLista(p) + ' · cama ' + esc(cama(p)) + '. Queda archivado como «no activado»: sale de las listas, no se borra y se puede ver en Pacientes.</p>' +
+      '<label>Motivo</label><select id="v34mot"><option>egresó sin entrar al piloto</option><option>egresó con HOSDOM</option><option>egresó con cuidados paliativos</option><option>trasladado</option><option>falleció</option></select>' +
+      '<div class="row" style="margin-top:14px"><button class="btn" id="v34ok">Archivar</button><button class="btn sec" onclick="cerrar()">Cancelar</button></div>');
+    $('#v34ok').onclick = () => { const m = $('#v34mot').value; cerrar(); guardar(opsArchivar(p, m), 'Archivado: ' + nom(p)); };
+  };
+  window.v34depurar = () => {
+    const L = (DB.PACIENTES || []).filter(hosp).sort((a, b) => (a.fecha_ingreso || '') < (b.fecha_ingreso || '') ? -1 : 1);
+    if (!L.length) return toast('No hay hospitalizados en el portal.');
+    modal('<h2>Depurar hospitalizados</h2><p class="note" style="margin-top:0">Marque los que ya se fueron (revisar en TrakCare). Se archivan como «no activado»: no se borran.</p>' +
+      '<div class="lista" style="max-height:55vh;overflow:auto">' + L.map(p => '<label class="chk" style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" value="' + esc(p.id) + '"> <span><b>' + nomLista(p) + '</b> · cama ' + esc(cama(p)) +
+        ' <span class="note">· ingreso ' + (p.fecha_ingreso ? dm(p.fecha_ingreso) : '—') + (p.fecha_alta ? ' · alta ' + dm(p.fecha_alta) : '') + '</span></span></label>').join('') + '</div>' +
+      '<div class="row" style="margin-top:14px"><button class="btn" id="v34dep">Archivar marcados</button><button class="btn sec" onclick="cerrar()">Cancelar</button></div>');
+    $('#v34dep').onclick = () => {
+      const ids = [...document.querySelectorAll('#mbox input[type=checkbox]:checked')].map(x => x.value);
+      if (!ids.length) return toast('No marcó a nadie.');
+      cerrar(); guardar(ids.flatMap(id => opsArchivar(pac(id), 'egresó sin entrar al piloto (depuración ' + dm(hoy()) + ')')), ids.length + ' archivado' + (ids.length > 1 ? 's' : ''));
+    };
+  };
+  // botón en la ficha de un hospitalizado
+  const ba0 = bloqueAlta;
+  bloqueAlta = function (p) {
+    const h = ba0.apply(this, arguments);
+    return hosp(p) ? h.replace(/<\/div>$/, '<button class="btn sm sec" onclick="v34egreso(' + js(p.id) + ')">Ya no está hospitalizado</button></div>') : h;
+  };
+  // Inicio: botones del mensaje del día y de la depuración
+  const pr = window.__panelRender;
+  if (typeof pr === 'function') window.__panelRender = function () {
+    pr.apply(this, arguments);
+    try { const top = $('#app .v27-top'); if (top) top.insertAdjacentHTML('afterend', '<div class="row" style="gap:8px;margin:0 0 10px"><button class="btn sec" onclick="v34mensaje()">💬 Mensaje del día para el grupo</button>' +
+      (esCoord() ? '<button class="btn sec" onclick="v34depurar()">🧹 Depurar hospitalizados</button>' : '') + '</div>'); } catch (e) { console.warn('v34', e); }
+  };
+  const mm0 = menuMas;
+  menuMas = function () {
+    mm0.apply(this, arguments);
+    try { const m = $('#mbox .menu-mas'); if (m) m.insertAdjacentHTML('afterbegin', '<button class="btn sec" onclick="cerrar();v34mensaje()">Mensaje del día para el grupo</button><button class="btn sec" onclick="cerrar();v34depurar()">Depurar hospitalizados</button>'); } catch (e) {}
+  };
+  if (typeof DB !== 'undefined' && DB && VISTA === 'panel') render();
 })();
 </script>
 </body>
