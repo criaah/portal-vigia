@@ -6776,7 +6776,8 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     const nov = typeof vigiaNovedades === 'function' ? vigiaNovedades().length : 0;
     let h = '<div class="v27-top"><h2 style="margin:0">Hoy</h2><div class="row" style="gap:8px">' +
       '<button class="v27-ico' + (ST.nov ? ' on' : '') + '" onclick="v27.nov()" title="Novedades">🔔' + (nov ? '<span class="v27-n">' + nov + '</span>' : '') + '</button>' +
-      '<button class="v27-ico' + (ST.bus ? ' on' : '') + '" onclick="v27.bus()" title="Buscar">🔍</button></div></div>';
+      '<button class="v27-ico' + (ST.bus ? ' on' : '') + '" onclick="v27.bus()" title="Buscar">🔍</button>' +
+      (typeof movil === 'function' && movil() ? '' : '<button class="btn" onclick="' + (typeof agregarRapido === 'function' ? 'agregarRapido(1)' : 'nuevoPaciente()') + '">+ Agregar paciente</button>') + '</div></div>';
     h += '<div class="seg" style="margin:0 0 10px">' + [['mias', 'Mías'], ['rol', 'Mi rol'], ['todos', 'Todos']].map(([k, l]) => '<button class="' + (ST.ver === k ? 'on' : '') + '" onclick="v27.ver(\'' + k + '\')">' + l + '</button>').join('') + '</div>';
     if (ST.ver !== 'todos' && !YO()) h += '<div class="card note">Para ver lo suyo, elija su nombre en «Más» → «¿Quién eres?».</div>';
     if (ST.bus) h += '<input id="v27q" placeholder="Nombre, RUT o cama" value="' + esc(ST.q) + '" oninput="v27.q(this.value)" style="margin:0 0 10px">';
@@ -7032,6 +7033,22 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   };
   window.guardar = guardar;
   if (typeof DB !== 'undefined' && DB && VISTA === 'panel') render();
+})();
+</script>
+<script>
+// ============================================================ v29 · 05-nov-2026 · Inicio y la ficha se actualizan solos cuando otro cambia algo
+// El pulso (cada 12 s) ya recargaba los datos, pero desde la v21 «Inicio» (vista panel) no se volvía a dibujar. No interrumpe si alguien está escribiendo o tiene un formulario abierto.
+(function () {
+  const c0 = cargar;
+  cargar = async function (silencioso) {
+    const r = await c0.apply(this, arguments);
+    try {
+      const ocupado = $('#modal').style.display === 'flex' || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
+      if (silencioso && DB && !ocupado && ['panel', 'semana'].includes(VISTA)) render();
+    } catch (e) {}
+    return r;
+  };
+  window.cargar = cargar;
 })();
 </script>
 </body>
