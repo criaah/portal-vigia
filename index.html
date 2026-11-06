@@ -6190,6 +6190,21 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     im.onload = () => { clearTimeout(t); YT_OK = true; }; im.onerror = () => { clearTimeout(t); YT_OK = false; };
     im.src = 'https://www.youtube.com/favicon.ico?v=' + Date.now(); } catch (e) { YT_OK = false; }
   const queDe = u => { try { return decodeURIComponent(String(u).split('search_query=')[1] || '').replace(/\+/g, ' '); } catch (e) { return ''; } };
+  // v36 · el acceso se adapta al equipo (sirve para YouTube o cualquier otro enlace):
+  //   teléfono → botón directo (y Spotify si es canción);  PC → QR para abrirlo en el teléfono, más «ábralo aquí» solo si el sitio carga en este equipo.
+  const esTel = () => { try { return /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent) || (matchMedia('(pointer:coarse)').matches && Math.min(screen.width, screen.height) < 820); } catch (e) { return false; } };
+  const spot = q => 'https://open.spotify.com/search/' + encodeURIComponent(q);
+  function acceso(m) {
+    if (!m.u) return '';
+    const musica = /^Escuchar/.test(m.l || ''), q = queDe(m.u), esYT = /youtube\.com|youtu\.be/.test(m.u);
+    if (esTel()) return '<a class="vg-l" href="' + esc(m.u) + '" target="_blank" rel="noopener">' + esc(m.l) + ' ↗</a>' +
+      (musica && q ? '<a class="vg-l vg-sp" href="' + esc(spot(q)) + '" target="_blank" rel="noopener">Spotify ↗</a>' : '') +
+      (esYT && YT_OK === false ? '<span class="vg-nota">Si no abre, apague el Wi-Fi y use datos.</span>' : '');
+    let qr = ''; try { qr = qrSvg(m.u); } catch (e) {}
+    const aqui = (!esYT || YT_OK === true) ? '<br><a class="vg-aq" href="' + esc(m.u) + '" target="_blank" rel="noopener">o ábralo aquí ↗</a>' : '';
+    return '<div class="vg-qr">' + (qr ? '<div class="vg-qrc">' + qr + '</div>' : '') + '<div><b>' + (musica ? '🎧 ' : '📺 ') + esc(m.l) + '</b><br>' +
+      (qr ? '📱 Escanee con la cámara de su teléfono.' : '📱 En su teléfono, busque: «' + esc(q) + '».') + aqui + '</div></div>';
+  }
   const M = [
     {t: 'Hola, soy Vigi 🦉. Vigilo de noche para que nadie vuelva al hospital sin necesidad. El objetivo de VIGÍA es simple: menos rehospitalizaciones y más días en casa.'},
     {t: 'Cada llamada que hacen es un hilo que sostiene a alguien en su casa. Hoy, ese hilo puede ser el que importa.'},
@@ -6260,11 +6275,13 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     '<circle cx="53" cy="105" r="2.6" fill="#2AA44F"/><circle cx="67" cy="105" r="2.6" fill="#F4C21B"/>' +
     '<path d="M44 120l-4 6M52 121l0 6M68 121l0 6M76 120l4 6" stroke="#F2A33A" stroke-width="3" stroke-linecap="round"/></svg>';
   const st = document.createElement('style');
-  st.textContent = '#vigi{position:fixed;z-index:60;left:12px;top:64px;max-width:min(360px,calc(100vw - 24px));background:#fff;color:#1D2733;border-radius:16px;box-shadow:0 12px 34px rgba(14,42,71,.28);padding:14px 16px 12px;display:flex;gap:12px;align-items:flex-start;animation:vgIn .45s cubic-bezier(.2,.9,.3,1.3) both;border:2px solid #E8EEF5}' +
+  st.textContent = '#vigi{position:fixed;z-index:60;left:12px;top:64px;max-width:min(400px,calc(100vw - 24px));background:#fff;color:#1D2733;border-radius:16px;box-shadow:0 12px 34px rgba(14,42,71,.28);padding:14px 16px 12px;display:flex;gap:12px;align-items:flex-start;animation:vgIn .45s cubic-bezier(.2,.9,.3,1.3) both;border:2px solid #E8EEF5}' +
     '#vigi:before{content:"";position:absolute;left:22px;top:-9px;width:16px;height:16px;background:#fff;transform:rotate(45deg);border-left:2px solid #E8EEF5;border-top:2px solid #E8EEF5}' +
     '#vigi .vg-b{flex:none;animation:vgFlota 3s ease-in-out infinite}#vigi .vg-par{animation:vgParpa 4.2s infinite}#vigi .vg-cab{transition:transform .25s ease-out}#vigi .vg-b svg{transform-origin:50% 90%;transition:transform .3s ease-out}#vigi:not(.sigue) .vg-cab{animation:vgCab 6s ease-in-out infinite}' +
     '#vigi .vg-n{font-size:12px;font-weight:700;color:#1B7A86;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}#vigi .vg-t{font-size:14.5px;line-height:1.45}' +
-    '#vigi .vg-tel{font-size:13px;background:#E6F4F1;color:#0E2A47;border-radius:8px;padding:6px 10px}#vigi .vg-acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#vigi a.vg-l{background:#1B7A86;color:#fff;text-decoration:none;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600}' +
+    '#vigi .vg-tel{font-size:13px;background:#E6F4F1;color:#0E2A47;border-radius:8px;padding:6px 10px}#vigi .vg-acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#vigi a.vg-l{background:#1B7A86;color:#fff;text-decoration:none;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600}#vigi a.vg-sp{background:#1A8F4A}' +
+    '#vigi .vg-qr{flex-basis:100%;display:flex;gap:12px;align-items:center;background:#F4F7FA;border-radius:10px;padding:8px;font-size:13px;line-height:1.45}#vigi .vg-qrc{flex:none;width:116px;height:116px}#vigi .vg-qrc svg{width:100%;height:100%;display:block}' +
+    '#vigi .vg-nota{font-size:12px;color:#5B6470}#vigi a.vg-aq{color:#1B7A86;font-weight:600}' +
     '#vigi button{background:#EEF2F5;color:#0E2A47;border:0;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer}#vigi .vg-x{position:absolute;right:6px;top:4px;background:none;font-size:18px;color:#5B6470;padding:2px 6px}' +
     '@keyframes vgIn{0%{opacity:0;transform:translateY(-10px) scale(.85)}100%{opacity:1;transform:none}}@keyframes vgFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}' +
     '@keyframes vgParpa{0%,92%,100%{height:0}95%{height:36px}}@keyframes vgCab{0%,40%,100%{transform:none}50%,65%{transform:translateX(7px)}78%,90%{transform:translateX(-7px)}}' +
@@ -6277,8 +6294,7 @@ window.addEventListener('resize', () => { const m = movil(); if (m !== eraMovil)
     let el = document.getElementById('vigi');
     if (!el) { el = document.createElement('div'); el.id = 'vigi'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Vigi, el búho VIGÍA'); document.body.appendChild(el); }
     el.innerHTML = '<div class="vg-b">' + OWL + '</div><div><div class="vg-n">Vigi · el búho VIGÍA</div><div class="vg-t">' + esc(m.t) + '</div><div class="vg-acc">' +
-      (m.u ? (YT_OK === true ? '<a class="vg-l" href="' + m.u + '" target="_blank" rel="noopener">' + esc(m.l) + ' ↗</a>'
-        : '<span class="vg-tel">' + (/^Escuchar/.test(m.l || '') ? '🎧' : '📺') + ' En su teléfono, busque: <b>' + esc(queDe(m.u)) + '</b></span>') : '') + '<button type="button" id="vg-otro">Otro mensaje</button></div></div>' +
+      acceso(m) + '<button type="button" id="vg-otro">Otro mensaje</button></div></div>' +
       '<button type="button" class="vg-x" aria-label="Cerrar">×</button>';
     try { const r = document.getElementById('logoBtn').getBoundingClientRect(); el.style.top = Math.max(8, r.bottom + 12) + 'px'; el.style.left = Math.max(8, r.left - 6) + 'px'; } catch (e) {}
     el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
