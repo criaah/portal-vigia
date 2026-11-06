@@ -6795,7 +6795,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   if (typeof pr === 'function') window.__panelRender = function () { pr.apply(this, arguments); try { $('#app').insertAdjacentHTML('afterbegin', '<section class="psec">' + bloque() + '</section>'); } catch (e) { console.warn('novedades', e); } };
   // al guardar: recordar que el equipo ya lo ve en el portal
   const g0 = guardar;
-  guardar = function (ops, msg) { return g0.call(this, ops, msg ? msg + ' · el equipo ya lo ve en Novedades' : msg); };
+  guardar = function (ops, msg) { return g0.call(this, ops, msg ? msg + ' · ya lo ve todo el equipo' : msg); };
   window.guardar = guardar;
   if (typeof DB !== 'undefined' && DB && VISTA === 'panel') render();
 })();
@@ -6839,15 +6839,12 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
       return {p, x, av, k: x ? ((ETAPA_NODO[x.nodo] === 'prealta' && !p.fecha_alta) ? 'ingreso' : (ETAPA_NODO[x.nodo] || 'otros')) : 'otros', // v34 · sin alta indicada sigue siendo candidato
         u: Math.min(x ? urg(x.t) : 3, ua, porAsignarGC(p) ? 1 : 3)}; }).filter(pasaVer);
     const cuenta = k => filas.filter(f => f.k === k).length;
-    const nov = typeof vigiaNovedades === 'function' ? vigiaNovedades().length : 0;
     let h = '<div class="v27-top"><h2 style="margin:0">Hoy</h2><div class="row" style="gap:8px">' +
-      '<button class="v27-ico' + (ST.nov ? ' on' : '') + '" onclick="v27.nov()" title="Novedades">🔔' + (nov ? '<span class="v27-n">' + nov + '</span>' : '') + '</button>' +
       '<button class="v27-ico' + (ST.bus ? ' on' : '') + '" onclick="v27.bus()" title="Buscar">🔍</button>' +
       (typeof movil === 'function' && movil() ? '' : '<button class="btn" onclick="' + (typeof agregarRapido === 'function' ? 'agregarRapido(1)' : 'nuevoPaciente()') + '">+ Agregar paciente</button>') + '</div></div>';
     h += '<div class="seg" style="margin:0 0 10px">' + [['mias', 'Mías'], ['rol', 'Mi rol'], ['todos', 'Todos']].map(([k, l]) => '<button class="' + (ST.ver === k ? 'on' : '') + '" onclick="v27.ver(\'' + k + '\')">' + l + '</button>').join('') + '</div>';
     if (ST.ver !== 'todos' && !YO()) h += '<div class="card note">Para ver lo suyo, elija su nombre en «Más» → «¿Quién eres?».</div>';
     if (ST.bus) h += '<input id="v27q" placeholder="Nombre, RUT o cama" value="' + esc(ST.q) + '" oninput="v27.q(this.value)" style="margin:0 0 10px">';
-    if (ST.nov && typeof vigiaNovBloque === 'function') h += vigiaNovBloque();
     h += extras();
     h += candidatos().map(tarjetaCandidato).join('');
     h += '<div class="v27-emb">' + ORDEN.map(k => '<button class="' + (ST.et === k ? 'on' : '') + '" style="--c:' + ETAPA_COLOR[k] + ';--f:' + ETAPA_FONDO[k] + '" onclick="v27.et(\'' + k + '\')"><b>' + cuenta(k) + '</b><span>' + CORTO[k] + '</span></button>').join('') + '</div>';
@@ -6858,9 +6855,9 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     h += L.map(({p, x, k, u, av}) => {
       const cuando = x && x.t.fecha_debida ? (u === 0 ? 'vencida ' + dm(x.t.fecha_debida) : x.t.fecha_debida === hoy() ? 'hoy' : u === 1 ? 'mañana' : dm(x.t.fecha_debida)) : '';
       return '<div class="v27-c" style="border-left-color:' + ETAPA_COLOR[k] + '" onclick="ir(\'caso\',' + js(p.id) + ')"><i class="v27-u" style="background:' + URG_COL[u] + '"></i><div class="tx"><div class="t1">' + rotulo(p) + '</div>' +
-        (av ? lineaAviso(p, u) : '') + (porAsignarGC(p) ? lineaGC(p) : '') +
+        (av ? lineaAviso(p, u) : '') + (porAsignarGC(p) ? lineaGC(p) : '') + (typeof lineaExtra === 'function' ? lineaExtra(p) : '') +
         '<div class="t2">' + (x ? '<b style="color:' + ETAPA_COLOR[k] + '">' + esc(x.nodo === 'T4' && !p.fecha_alta ? 'Candidato · espera la indicación de alta' : x.nombre.replace(/ antes del alta$/, '').replace(/^Revisión prealta: /, 'Prealta: ')) + '</b>' : '<span class="note">sin pasos pendientes</span>') +
-        (cuando ? ' <span class="note" style="color:' + URG_COL[u] + ';font-weight:' + (u < 2 ? 700 : 400) + '">· ' + cuando + '</span>' : '') + '</div></div>' +
+        (cuando ? ' <span class="note" style="color:' + URG_COL[u] + ';font-weight:' + (u < 2 ? 700 : 400) + '">· ' + cuando + '</span>' : '') + '</div>' + (typeof lineaNuevo === 'function' ? lineaNuevo(p) : '') + '</div>' +
         '<div class="fin">' + (porAsignarGC(p) && esGC() ? '<button class="btn sm" onclick="event.stopPropagation();asignarGC(' + js(p.id) + ')">Asignar</button> ' : '') + (av && esCoord() ? '<button class="btn sm' + (p.titular ? ' sec' : '') + '" onclick="event.stopPropagation();asignarAlta(' + js(p.id) + ')">' + (p.titular ? 'Cambiar' : 'Asignar') + '</button> ' : '') + (!deAlta(p) && !p.fecha_alta ? '<button class="btn sm sec" title="Avisar que se va de alta" onclick="event.stopPropagation();altaProbable(' + js(p.id) + ')">🏠 Alta</button> ' : '') + (typeof aCargoTxt === 'function' ? aCargoTxt(p, true) : '') + '</div></div>';
     }).join('');
     return h;
@@ -7095,6 +7092,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   const pr = window.__panelRender;
   if (typeof pr === 'function') window.__panelRender = function () {
     pr.apply(this, arguments);
+    return; // v35 · lo de Pendientes va como línea en la tarjeta de cada paciente
     try { const b = bloque(); if (!b) return; const top = $('#app .v27-top'); (top ? top.nextElementSibling : null) ? top.nextElementSibling.insertAdjacentHTML('afterend', b) : $('#app').insertAdjacentHTML('afterbegin', b); } catch (e) { console.warn('pendientes', e); }
   };
   // no guardar una fecha de alta anterior al ingreso
@@ -7192,7 +7190,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
   if (typeof pr === 'function') window.__panelRender = function () {
     pr.apply(this, arguments);
     try { const top = $('#app .v27-top'); if (top) top.insertAdjacentHTML('afterend', '<div class="row" style="gap:8px;margin:0 0 10px"><button class="btn sec" onclick="v34mensaje()">💬 Mensaje del día para el grupo</button>' +
-      (esCoord() ? '<button class="btn sec" onclick="v34depurar()">🧹 Depurar hospitalizados</button>' : '') + '</div>'); } catch (e) { console.warn('v34', e); }
+      '</div>'); } catch (e) { console.warn('v34', e); } // v35 · «Depurar hospitalizados» queda en «Más»
   };
   const mm0 = menuMas;
   menuMas = function () {
@@ -7200,6 +7198,79 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
     try { const m = $('#mbox .menu-mas'); if (m) m.insertAdjacentHTML('afterbegin', '<button class="btn sec" onclick="cerrar();v34mensaje()">Mensaje del día para el grupo</button><button class="btn sec" onclick="cerrar();v34depurar()">Depurar hospitalizados</button>'); } catch (e) {}
   };
   if (typeof DB !== 'undefined' && DB && VISTA === 'panel') render();
+})();
+</script>
+<script>
+// ============================================================ v35 · 06-nov-2026 · todo en la tarjeta del paciente; imagen de cada usuario
+// Sin bloque de Novedades ni de Pendientes: lo que antes se repetía allí va como una línea en la tarjeta de ese paciente, y solo si sirve para actuar:
+//   1) problema en una llamada (7 días), en rojo;  2) dato que falta o no cuadra (lo de Pendientes, sin las llamadas vencidas, que ya están en la lista);
+//   3) «nuevo»: lo último que otro registró desde que usted abrió la ficha de ese paciente (abrir la ficha lo da por visto).
+// Imagen de usuario: cada persona elige su emoji en «Más → Mi imagen» o tocando su nombre arriba; lo ve todo el equipo (columna «avatar» de EQUIPO).
+(function () {
+  const yo = () => (typeof AUTH !== 'undefined' && AUTH.nombre) || '';
+  const ajeno = q => !!q && q !== yo();
+  const K = id => 'vg-vp-' + id;
+  const leerV = id => { try { return localStorage.getItem(K(id)) || ''; } catch (e) { return ''; } };
+  // la primera vez en cada dispositivo no se marca nada como nuevo: cuenta desde ese momento
+  const base = () => { try { let b = localStorage.getItem('vg-vp-desde'); if (!b) { b = ahora(); localStorage.setItem('vg-vp-desde', b); } return b; } catch (e) { return ahora(); } };
+  const NOM = {T1: 'revisión de ficha', T4: 'revisión prealta', G1: 'revisión prealta', T6: 'Atención 1', T12: 'llamada', T21: 'cierre día 21', T22: 'revisión a 30 días'};
+  const corto = n => String(n || '').replace(/\s*\(.*?\)/g, '').trim().split(/\s+/)[0] || '';
+  const r0 = render;
+  render = function () { const x = r0.apply(this, arguments); try { if (VISTA === 'caso' && CASO) localStorage.setItem(K(CASO), ahora()); } catch (e) {} return x; };
+  function problemaLlamada(p) {
+    const lim = sumar(hoy(), -7);
+    const c = (DB.CONTACTOS || []).filter(c => c.id_paciente === p.id && c.salida && c.salida !== 'sin problema nuevo' && String(c.fecha_real || c.registrado || '').slice(0, 10) >= lim)
+      .sort((a, b) => String(a.registrado || a.fecha_real) < String(b.registrado || b.fecha_real) ? 1 : -1)[0];
+    return c ? '⚠️ Llamada ' + hitoTxt(c.hito) + ': ' + c.salida : '';
+  }
+  function nuevoDe(p) {
+    const d = leerV(p.id) || base(), L = [];
+    if ((p.creado || '') > d && ajeno(p.creado_por)) L.push({f: p.creado, t: 'agregado al piloto', q: p.creado_por});
+    (DB.TAREAS || []).forEach(t => { if (t.id_paciente !== p.id || t.estado !== 'hecha') return; const f = String(t.actualizado || t.fecha_hecha || ''), n = (P(t.n) || {}).id_nodo;
+      if (f > d && ajeno(t.hecho_por) && NOM[n]) L.push({f, t: NOM[n] + (t.hito ? ' ' + hitoTxt(t.hito) : '') + ' hecha', q: t.hecho_por}); });
+    (DB.CONTACTOS || []).forEach(c => { if (c.id_paciente !== p.id) return; const f = String(c.registrado || c.fecha_real || ''); if (f > d && ajeno(c.registrado_por)) L.push({f, t: 'llamada ' + hitoTxt(c.hito) + ': ' + (c.resultado || ''), q: c.registrado_por}); });
+    (DB.EVENTOS || []).forEach(e => { if (e.id_paciente !== p.id) return; const f = String(e.registrado || ''); if (f > d && ajeno(e.registrado_por)) L.push({f, t: e.tipo + ' ' + dm(e.fecha), q: e.registrado_por}); });
+    L.sort((a, b) => a.f < b.f ? 1 : -1);
+    return L[0] ? L[0].t + (corto(L[0].q) ? ' (' + corto(L[0].q) + ')' : '') : '';
+  }
+  function datoFalta(p) {
+    if (typeof vigiaPendientes !== 'function') return null;
+    const x = vigiaPendientes().filter(x => x.p.id === p.id && !/llamada/.test(x.t))[0];
+    return x || null;
+  }
+  const COL = ['#B3261E', '#9A5B00', '#5B6B7A'];
+  window.lineaExtra = p => {
+    let h = '';
+    const pl = problemaLlamada(p); if (pl) h += '<div class="t2" style="color:#B3261E;font-weight:700">' + esc(pl) + '</div>';
+    const df = datoFalta(p); if (df) h += '<div class="t2" style="color:' + COL[df.g] + '">⚠ ' + esc(df.t) + ' <span class="note">→ ' + esc(df.a) + '</span></div>';
+    return h;
+  };
+  window.lineaNuevo = p => { const nv = nuevoDe(p); if (nv && /^llamada/.test(nv) && problemaLlamada(p)) return ''; return nv ? '<div class="t3 v35-nuevo"><b>● nuevo</b> · ' + esc(nv) + '</div>' : ''; };
+  // ---------------------------------------------------- imagen de usuario
+  const AVS = ['🦉', '🐢', '🦊', '🐝', '🌻', '🐬', '🦜', '🍀', '🐧', '🦋', '🌵', '🐙', '🦔', '🐞', '🐳', '🦁', '🐼', '🐨', '🦒', '🦩', '🐿️', '🦝', '🐸', '🐌',
+    '🌸', '🌺', '🌷', '🌳', '🍄', '🌙', '⭐', '☀️', '🌈', '❄️', '🔥', '🌊', '🍎', '🍋', '🍓', '🥑', '☕', '🍵', '🎈', '🎨', '🎵', '📚', '🧭', '⚓', '🚲', '⛰️', '🏔️', '🪁', '🧶', '🪴'];
+  const avDe = n => ((DB && DB.EQUIPO || []).find(e => e.persona === n) || {}).avatar || '';
+  const av0 = window.avatarDe;
+  window.avatarDe = nom => { const a = nom && avDe(nom); return a ? '<span class="av" title="' + esc(nom) + '">' + esc(a) + '</span>' : av0(nom); };
+  window.miImagen = () => {
+    const n = yo(); if (!n) return toast('Primero elija su nombre en «¿Quién eres?».');
+    const mio = avDe(n), usados = {};
+    (DB.EQUIPO || []).forEach(e => { if (e.avatar && e.persona !== n && e.activo !== 'no') usados[e.avatar] = e.persona; });
+    modal('<h2>Mi imagen</h2><p class="note" style="margin-top:0">Elija cómo lo verá el equipo en las listas y asignaciones. Las tachadas ya las usa otra persona.</p>' +
+      '<div class="v35-avs">' + AVS.map(a => '<button type="button" class="' + (a === mio ? 'on' : '') + '"' + (usados[a] ? ' disabled title="La usa ' + esc(usados[a]) + '"' : '') + ' onclick="elegirImagen(' + js(a) + ')">' + a + '</button>').join('') + '</div>' +
+      '<div class="row" style="margin-top:14px"><button class="btn sec" onclick="cerrar()">Cerrar</button></div>');
+  };
+  window.elegirImagen = a => { const n = yo(); cerrar(); guardar([{tabla: 'EQUIPO', registro: {persona: n, avatar: a}}], 'Listo: su imagen ahora es ' + a); };
+  const mm0 = menuMas;
+  menuMas = function () { mm0.apply(this, arguments); try { const m = $('#mbox .menu-mas'); if (m) m.insertAdjacentHTML('afterbegin', '<button class="btn sec" onclick="cerrar();miImagen()">' + (yo() ? avatarDe(yo()) + ' ' : '') + 'Mi imagen</button>'); } catch (e) {} };
+  // tocar la imagen propia arriba abre el selector (el nombre sigue abriendo «¿Quién eres?»)
+  document.addEventListener('click', e => { const s = e.target.closest && e.target.closest('#usuario .av'); if (s && yo()) { e.preventDefault(); e.stopPropagation(); miImagen(); } }, true);
+  const st = document.createElement('style');
+  st.textContent = '.v35-nuevo{color:#1B7A86;font-size:13px}.v35-nuevo b{font-size:12px}' +
+    '.v35-avs{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:6px}.v35-avs button{font-size:24px;height:48px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}' +
+    '.v35-avs button.on{border:2px solid #1B7A86;background:#E6F4F1}.v35-avs button:disabled{opacity:.25;cursor:not-allowed}';
+  document.head.appendChild(st);
+  if (typeof DB !== 'undefined' && DB) render();
 })();
 </script>
 </body>
